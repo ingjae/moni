@@ -3,7 +3,7 @@ SHELL_MAJ := $(shell gnome-shell --version 2>/dev/null | grep -oE '[0-9]+' | hea
 TARGET    := $(if $(filter 42 43 44,$(SHELL_MAJ)),legacy,esm)
 DEST      := $(HOME)/.local/share/gnome-shell/extensions/$(UUID)
 
-.PHONY: build install uninstall test nested logs clean
+.PHONY: build install uninstall test test-ui nested logs clean
 
 build:
 	python3 tools/build.py
@@ -27,6 +27,9 @@ test: build
 	  print('ok    legacy collectors load under imports.*');"
 	@for f in build/legacy/*.js; do node --check $$f 2>/dev/null || { echo "FAIL  syntax $$f"; exit 1; }; done; \
 	  command -v node >/dev/null && echo "ok    legacy build parses" || true
+
+test-ui:
+	python3 tests/editor.test.py
 
 # Run a throwaway GNOME Shell in a window, with the extension loaded.
 nested: install

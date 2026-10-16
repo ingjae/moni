@@ -168,7 +168,7 @@ function makeCard(title, color) {
         style_class: 'moni-dot', style: `background-color: ${css(color)};`,
         y_align: Clutter.ActorAlign.CENTER,
     }));
-    const label = new St.Label({text: title, style_class: 'moni-card-title', y_align: Clutter.ActorAlign.CENTER});
+    const label = new St.Label({text: title, style_class: 'moni-card-title', x_expand: true, y_align: Clutter.ActorAlign.CENTER});
     head.add_child(label);
     const value = new St.Label({
         style_class: 'moni-card-value', x_expand: true,
@@ -217,6 +217,14 @@ class MoniIndicator extends PanelMenu.Button {
         this._watchDevices();
         this._tick();
         this._startTimer();
+        const queueFit = () => this._queueFit();
+        this.connect('notify::width', queueFit);
+        Main.panel.connectObject('notify::width', queueFit, this);
+        Main.panel._centerBox.connectObject('notify::width', queueFit, this);
+        Main.panel._rightBox.connectObject('notify::width', queueFit, this);
+        Main.panel._leftBox.connectObject('notify::width', queueFit, this);
+        St.ThemeContext.get_for_stage(global.stage).connectObject('changed', queueFit, this);
+        this._queueFit();
     }
 
     // ── panel ──────────────────────────────────────────────────────────
@@ -272,10 +280,13 @@ class MoniIndicator extends PanelMenu.Button {
             chip('disk', 'DISK');
         if (s.get_boolean('show-ip'))
             chip('ip', '');
+        this._fallback = new St.Icon({icon_name: 'utilities-system-monitor-symbolic', icon_size: 16});
+        this._panel.add_child(this._fallback);
         this._updatePanel();
     }
 
     _updatePanel() {
+        this._fallback.visible = false;
         const st = this._state;
         const set = (key, text, visible = true) => {
             const c = this._chips[key];
@@ -314,11 +325,29 @@ class MoniIndicator extends PanelMenu.Button {
         set('can', canAlert ? 'BUS?' : fmtCount(fps), fps > 0 || canAlert);
         this._chips.can?.box[canAlert ? 'add_style_class_name' : 'remove_style_class_name']('moni-alert');
         this._fitPanel();
+        this._fallback.visible = !Object.values(this._chips).some(c => c.box.visible);
+        const hiddenAlert = Object.values(this._chips).some(c => c.fitHidden && c.box.has_style_class_name('moni-alert'));
+        this._fallback[hiddenAlert ? 'add_style_class_name' : 'remove_style_class_name']('moni-alert');
     }
 
     // Never draw over the clock: if the chips need more room than is left
     // between the clock and the rest of our panel box, drop the least
     // important ones. Everything hidden here is still in the dropdown.
+    _queueFit() {
+        if (this._fitLater)
+            return;
+        this._fitLaters = global.compositor.get_laters?.();
+        const callback = () => {
+            this._fitLater = 0;
+            if (!this._destroyed)
+                this._updatePanel();
+            return GLib.SOURCE_REMOVE;
+        };
+        this._fitLater = this._fitLaters
+            ? this._fitLaters.add(Meta.LaterType.BEFORE_REDRAW, callback)
+            : Meta.later_add(Meta.LaterType.BEFORE_REDRAW, callback);
+    }
+
     _fitPanel() {
         const box = this._settings.get_string('panel-position');
         const side = box === 'left' ? Main.panel._leftBox : box === 'right' ? Main.panel._rightBox : null;
@@ -372,10 +401,11 @@ class MoniIndicator extends PanelMenu.Button {
         const scroll = this._dashScroll = new St.ScrollView({style_class: 'moni-scroll', overlay_scrollbars: true});
         scroll.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
         scroll.set_child(dash.actor);
-        const holder = new PopupMenu.PopupMenuSection();
-        holder.actor.add_child(scroll);
-        this.menu.addMenuItem(holder);
-        // dash already belongs to the scroll view; do not reparent it.
+        // Keep the section registered with PopupMenu for focus, sensitivity
+        // and destruction, while its content box stays inside the scroll view.
+        dash.actor = scroll;
+        scroll._delegate = dash;
+        this.menu.addMenuItem(dash);
 
         const top = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
         const topBox = new St.BoxLayout({vertical: true, style_class: 'moni-dash', x_expand: true});
@@ -446,6 +476,12 @@ class MoniIndicator extends PanelMenu.Button {
 
     _refreshMenu() {
         const st = this._state, c = this._cards;
+        // Informational rows must retain the theme's normal text contrast.
+        const fg = this.menu.actor.get_theme_node().get_foreground_color();
+        for (const card of Object.values(c)) {
+            for (const label of [card.label, card.value, card.detail])
+                label.set_style(`color: rgb(${fg.red}, ${fg.green}, ${fg.blue});`);
+        }
         const monitor = Main.layoutManager.findMonitorForActor(this);
         if (monitor) {
             const work = Main.layoutManager.getWorkAreaForMonitor(monitor.index);
@@ -495,7 +531,7 @@ class MoniIndicator extends PanelMenu.Button {
         }
 
         c.net.value.text = `↓ ${fmtBytes(st.net?.rx)}/s   ↑ ${fmtBytes(st.net?.tx)}/s`;
-        const seconds = Math.min(HISTORY, Math.ceil(MENU_GRAPH[0] / 2) + 1) * (this._interval ?? 1500) / 1000;
+        const seconds = Math.min(HISTORY - 1, Math.floor((c.cpu.graph.width || MENU_GRAPH[0]) / 2)) * (this._interval ?? 1500) / 1000;
         const windowLabel = `last ${Math.round(seconds)} s`;
         c.cpu.detail.text += ` · ${windowLabel}`;
         c.mem.detail.text += ` · ${windowLabel}`;
@@ -743,6 +779,12 @@ class MoniIndicator extends PanelMenu.Button {
     destroy() {
         this._destroyed = true;
         this._cancellable.cancel();
+        if (this._fitLater) {
+            if (this._fitLaters)
+                this._fitLaters.remove(this._fitLater);
+            else
+                Meta.later_remove(this._fitLater);
+        }
         if (this._timer)
             GLib.source_remove(this._timer);
         if (this._devTimer)

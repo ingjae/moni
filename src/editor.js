@@ -14,6 +14,8 @@ import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import GdkPixbuf from 'gi://GdkPixbuf';
 import Cairo from 'cairo';
+import Pango from 'gi://Pango';
+import PangoCairo from 'gi://PangoCairo';
 import System from 'system';
 
 const TOOLS = [
@@ -386,10 +388,13 @@ class Editor {
             break;
         case 'text': {
             const fs = lw * 6;
-            cr.selectFontFace('Sans', Cairo.FontSlant.NORMAL, Cairo.FontWeight.BOLD);
-            cr.setFontSize(fs);
-            cr.moveTo(it.x1, it.y1 + fs * 0.8);
-            cr.textPath(it.text);
+            const layout = PangoCairo.create_layout(cr);
+            const font = Pango.FontDescription.from_string('Sans Bold');
+            font.set_absolute_size(fs * Pango.SCALE);
+            layout.set_font_description(font);
+            layout.set_text(it.text, -1);
+            cr.moveTo(it.x1, it.y1);
+            PangoCairo.layout_path(cr, layout);
             const light = r * 0.3 + g * 0.59 + b * 0.11 > 0.6;
             cr.setSourceRGBA(light ? 0 : 1, light ? 0 : 1, light ? 0 : 1, 0.9);
             cr.setLineWidth(lw * 0.9);

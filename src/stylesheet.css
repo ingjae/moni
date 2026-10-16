@@ -14,7 +14,7 @@
 
 .moni-dash { spacing: 14px; min-width: 360px; padding: 4px 2px; }
 .moni-card { spacing: 5px; }
-.moni-card-head { spacing: 8px; }
+.moni-card-head { spacing: 8px; width: 360px; }
 .moni-dot { width: 8px; height: 8px; border-radius: 4px; }
 .moni-card-title { font-weight: bold; }
 .moni-host { font-size: 12pt; }
