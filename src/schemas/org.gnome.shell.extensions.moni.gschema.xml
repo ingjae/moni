@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.moni" path="/org/gnome/shell/extensions/moni/">
+    <key name="update-interval" type="i"><default>1500</default><summary>Update interval in ms</summary></key>
+    <key name="panel-position" type="s"><default>'right'</default><summary>left, center or right</summary></key>
+    <key name="graph-width" type="i"><default>28</default><summary>Panel graph width in px</summary></key>
+    <key name="show-text" type="b"><default>true</default><summary>Show numbers next to graphs</summary></key>
+    <key name="show-cpu" type="b"><default>true</default><summary>Show CPU</summary></key>
+    <key name="show-ram" type="b"><default>true</default><summary>Show memory</summary></key>
+    <key name="show-gpu" type="b"><default>true</default><summary>Show GPU</summary></key>
+    <key name="show-net" type="b"><default>true</default><summary>Show network</summary></key>
+    <key name="show-disk" type="b"><default>true</default><summary>Show disk usage</summary></key>
+    <key name="show-ip" type="b"><default>true</default><summary>Show IP address</summary></key>
+    <key name="show-ros" type="b"><default>true</default><summary>ROS 2 node radar</summary></key>
+    <key name="show-rosbag" type="b"><default>true</default><summary>rosbag recording badge</summary></key>
+    <key name="show-can" type="b"><default>true</default><summary>CAN bus monitor</summary></key>
+    <key name="show-devices" type="b"><default>true</default><summary>Sensor device list</summary></key>
+    <key name="notify-devices" type="b"><default>true</default><summary>Notify on device plug/unplug</summary></key>
+    <key name="internet-probe" type="b"><default>true</default><summary>Measure internet latency</summary></key>
+    <key name="probe-host" type="s"><default>'1.1.1.1'</default><summary>Latency probe host (TCP 443)</summary></key>
+    <key name="screenshot-shortcut" type="as"><default><![CDATA[['<Super><Shift>s']]]></default><summary>Capture an area and open the editor</summary></key>
+    <key name="record-shortcut" type="as"><default><![CDATA[['<Super><Shift>d']]]></default><summary>Start / stop screen recording</summary></key>
+    <key name="record-cursor" type="b"><default>true</default><summary>Show the pointer in recordings</summary></key>
+  </schema>
+</schemalist>

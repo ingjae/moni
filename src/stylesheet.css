@@ -1,0 +1,27 @@
+.moni-panel { spacing: 7px; }
+.moni-chip { spacing: 3px; }
+.moni-chip-label { font-size: 8pt; font-weight: bold; }
+.moni-value { font-size: 9pt; font-feature-settings: "tnum"; min-width: 2.4em; text-align: right; }
+.moni-value-net { font-size: 7pt; min-width: 3.6em; }
+.moni-graph { background-color: rgba(128, 128, 128, 0.18); border-radius: 3px; }
+
+.moni-badge { border-radius: 9px; padding: 1px 7px; }
+.moni-badge .moni-chip-label, .moni-badge .moni-value { font-size: 8.5pt; font-weight: bold; min-width: 0; }
+.moni-badge-ros { background-color: rgba(34, 211, 238, 0.20); color: #67e8f9; }
+.moni-badge-can { background-color: rgba(251, 146, 60, 0.20); color: #fdba74; }
+.moni-badge-rec { background-color: rgba(248, 84, 84, 0.22); color: #fca5a5; }
+.moni-alert { background-color: rgba(239, 68, 68, 0.85); color: #ffffff; }
+
+.moni-dash { spacing: 14px; min-width: 360px; padding: 4px 2px; }
+.moni-card { spacing: 5px; }
+.moni-card-head { spacing: 8px; }
+.moni-dot { width: 8px; height: 8px; border-radius: 4px; }
+.moni-card-title { font-weight: bold; }
+.moni-host { font-size: 12pt; }
+.moni-card-value { font-feature-settings: "tnum"; font-size: 9.5pt; }
+.moni-detail { font-size: 8.5pt; }
+.moni-mono { font-family: monospace; font-size: 8.5pt; }
+.moni-ip-iface { font-size: 9.5pt; }
+.moni-accel { font-size: 8.5pt; padding-left: 24px; }
+.moni-select-hint { background-color: rgba(0, 0, 0, 0.75); color: #ffffff; border-radius: 6px; padding: 6px 12px; font-size: 10.5pt; }
+.moni-pin { box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55); border: 1px solid rgba(255, 255, 255, 0.25); }
