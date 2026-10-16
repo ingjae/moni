@@ -20,6 +20,7 @@ uninstall:
 
 # Collector smoke tests (ESM source) + legacy build sanity check.
 test: build
+	node tests/ui-regressions.test.cjs
 	gjs -m tests/collectors.test.js
 	gjs -c "imports.searchPath.unshift('build/legacy'); const C = imports.collectors; \
 	  if (!C.readMemory().total || !new C.CpuSampler()) throw new Error('legacy collectors broken'); \

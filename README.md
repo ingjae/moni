@@ -113,7 +113,7 @@ and is **not woken up** just to be measured.
 | **CPU** | sparkline + % | history graph, **per-core heat bars**, package temperature |
 | **Memory** | sparkline + % | used / total, swap |
 | **GPU** | sparkline + % | NVIDIA · AMD · **Jetson**: util, VRAM, temp, power. Sleeping dGPU → `zZ`, never woken |
-| **Network** | ↓/↑ graph + rates | throughput, internet latency (TCP probe), Wi-Fi signal |
+| **Network** | ↓/↑ graph + rates | throughput, probe-host latency (TCP connect), Wi-Fi signal |
 | **IP** | default-route address | every interface (Ethernet, Wi-Fi, Tailscale, …). **Click to copy** |
 | **Storage** | root usage % | read/write graph, every real mount with free space |
 | **Battery** | — | %, charging state, watts (laptops only) |
@@ -172,8 +172,8 @@ gnome-extensions enable moni@ingjae.github.io
 Prefer a zip? Grab one from [Releases](https://github.com/ingjae/moni/releases):
 
 ```bash
-gnome-extensions install --force moni@ingjae.github.io.gnome45-48.v0.0.1.zip   # Ubuntu 24.04
-gnome-extensions install --force moni@ingjae.github.io.gnome42-44.v0.0.1.zip   # Ubuntu 22.04
+gnome-extensions install --force moni@ingjae.github.io.gnome45-48.v0.0.2.zip   # Ubuntu 24.04
+gnome-extensions install --force moni@ingjae.github.io.gnome42-44.v0.0.2.zip   # Ubuntu 22.04
 ```
 
 Build requirements: `python3` and `glib-compile-schemas`. Runtime: only what Ubuntu ships with GNOME

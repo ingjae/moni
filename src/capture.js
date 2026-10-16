@@ -320,12 +320,16 @@ export class Capture {
 
     async stopRecording() {
         const rec = this._recording;
-        if (!rec)
+        if (!rec || rec.stopping)
             return;
-        this._recording = null;
+        rec.stopping = true;
         this._onRecordingChanged();
         try {
-            await this._call('StopScreencast', null, '(b)');
+            const [ok] = await this._call('StopScreencast', null, '(b)');
+            if (!ok)
+                throw new Error('the screencast service did not confirm the stop');
+            this._recording = null;
+            this._onRecordingChanged();
             // GNOME 45+ appends the container extension itself; 42-44 do not.
             let file = rec.file;
             if (!/\.\w+$/.test(file)) {
@@ -334,7 +338,10 @@ export class Capture {
             }
             Main.notify('Recording saved', file);
         } catch (e) {
+            rec.stopping = false;
+            this._onRecordingChanged();
             logError(e, 'moni: stop recording');
+            Main.notify('Recording could not be finalized', `Check recording status before retrying: ${e.message}`);
         }
     }
 

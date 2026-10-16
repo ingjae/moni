@@ -19,8 +19,8 @@
 .moni-card-title { font-weight: bold; }
 .moni-host { font-size: 12pt; }
 .moni-card-value { font-feature-settings: "tnum"; font-size: 9.5pt; }
-.moni-detail { font-size: 8.5pt; }
-.moni-mono { font-family: monospace; font-size: 8.5pt; }
+.moni-detail { font-size: 9.5pt; width: 360px; }
+.moni-mono { font-family: monospace; font-size: 9pt; }
 .moni-ip-iface { font-size: 9.5pt; }
 .moni-accel { font-size: 8.5pt; padding-left: 24px; }
 .moni-select-hint { background-color: rgba(0, 0, 0, 0.75); color: #ffffff; border-radius: 6px; padding: 6px 12px; font-size: 10.5pt; }

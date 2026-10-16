@@ -109,7 +109,7 @@ class Editor {
             this.toolButtons[t.id] = b;
             toolbar.append(b);
         }
-        toolbar.append(new Gtk.Separator({orientation: Gtk.Orientation.VERTICAL, margin_start: 6, margin_end: 6}));
+        const palette = new Gtk.Box({spacing: 4, margin_start: 8, margin_end: 8, margin_bottom: 6});
         this.swatches = [];
         let sgroup = null;
         COLORS.forEach((c, i) => {
@@ -124,19 +124,22 @@ class Editor {
                     this.color = c;
             });
             this.swatches.push(b);
-            toolbar.append(b);
+            palette.append(b);
         });
 
         this.area = new Gtk.DrawingArea({hexpand: true, vexpand: true});
         this.area.add_css_class('moni-canvas');
         this.area.set_draw_func((_a, cr, w, h) => this.draw(cr, w, h));
 
-        this.status = new Gtk.Label({xalign: 0});
+        this.status = new Gtk.Label({xalign: 0, wrap: true});
         this.status.add_css_class('moni-status');
 
         const box = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL});
         box.append(header);
-        box.append(toolbar);
+        const toolScroll = new Gtk.ScrolledWindow({hscrollbar_policy: Gtk.PolicyType.AUTOMATIC, vscrollbar_policy: Gtk.PolicyType.NEVER});
+        toolScroll.set_child(toolbar);
+        box.append(toolScroll);
+        box.append(palette);
         box.append(this.area);
         box.append(this.status);
         this.toasts = new Adw.ToastOverlay();
@@ -220,6 +223,7 @@ class Editor {
 
     setTool(id) {
         this.tool = id;
+        this.updateStatus(null);
         this.area.set_cursor(Gdk.Cursor.new_from_name(id === 'text' ? 'text' : 'crosshair', null));
     }
 
@@ -291,7 +295,7 @@ class Editor {
             if (hex)
                 parts.push(`x ${Math.floor(p[0])}  y ${Math.floor(p[1])}`, hex);
         }
-        parts.push('A ↗  R ▭  H ▮  T  B ▦  N ①  M ⟷  I ◎   ·   1-8 color   ·   Ctrl+C copy  Ctrl+S save  Ctrl+P pin  Esc close');
+        parts.push(`${TOOLS.find(t => t.id === this.tool).name} · 1–8 color · Ctrl+C copy · Ctrl+S save · Esc close`);
         this.status.label = parts.join('   ');
     }
 

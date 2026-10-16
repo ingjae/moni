@@ -177,7 +177,10 @@ function makeCard(title, color) {
     head.add_child(value);
     box.add_child(head);
     const detail = new St.Label({style_class: 'moni-detail'});
-    detail.opacity = 200;
+    detail.opacity = 255;
+    detail.clutter_text.line_wrap = true;
+    detail.clutter_text.line_wrap_mode = 2; // Pango.WrapMode.WORD_CHAR
+    detail.clutter_text.ellipsize = 0;
     return {box, label, value, detail, add: w => box.add_child(w), finish: () => box.add_child(detail)};
 }
 
@@ -292,13 +295,15 @@ class MoniIndicator extends PanelMenu.Button {
         set('disk', pct(st.disk?.percent));
         set('ip', st.primaryIp ?? '', !!st.primaryIp);
         const rec = this._ext.capture.recording;
-        set('shot', rec ? fmtClock((GLib.get_monotonic_time() - rec.start) / 1e6) : '', !!rec);
+        set('shot', rec ? (rec.stopping ? 'Stopping…' : fmtClock((GLib.get_monotonic_time() - rec.start) / 1e6)) : '', !!rec);
 
         const nodes = (st.ros?.nodes ?? []).filter(n => n.role !== 'daemon');
         const domains = st.ros?.domains ?? [];
         set('ros', domains.length > 1 ? `${nodes.length} ⚠` : `${nodes.length}`, nodes.length > 0);
+        this._chips.ros?.box[domains.length > 1 ? 'add_style_class_name' : 'remove_style_class_name']('moni-alert');
 
-        const bag = st.ros?.bags[0];
+        const bags = [...(st.ros?.bags ?? [])].sort((a, b) => (a.eta ?? Infinity) - (b.eta ?? Infinity));
+        const bag = bags[0];
         set('rec', bag ? (bag.eta !== null ? fmtDuration(bag.eta) : `${fmtBytes(bag.rate)}/s`) : '', !!bag);
         this._chips.rec?.box[bag?.eta !== null && bag?.eta < 600 ? 'add_style_class_name' : 'remove_style_class_name']('moni-alert');
 
@@ -326,13 +331,16 @@ class MoniIndicator extends PanelMenu.Button {
         const room = Main.panel.width / 2 - Main.panel._centerBox.get_preferred_width(-1)[1] / 2 -
             others - overhead - 12;
         const spacing = this._panel.get_theme_node().get_length('spacing');
-        let used = 0, full = false;
-        for (const key of FIT_PRIORITY) {
+        let used = 0;
+        const priority = [...FIT_PRIORITY].sort((a, b) =>
+            Number(this._chips[b]?.box.has_style_class_name('moni-alert') ?? false) -
+            Number(this._chips[a]?.box.has_style_class_name('moni-alert') ?? false));
+        for (const key of priority) {
             const c = this._chips[key];
             if (!c || !c.box.visible)
                 continue;
             const w = c.box.get_preferred_width(-1)[1] + (used ? spacing : 0);
-            c.fitHidden = full ||= used + w > room;
+            c.fitHidden = used + w > room;
             c.box.visible = !c.fitHidden;
             if (!c.fitHidden)
                 used += w;
@@ -361,13 +369,13 @@ class MoniIndicator extends PanelMenu.Button {
 
         // The dashboard scrolls when it is taller than the work area.
         const dash = new PopupMenu.PopupMenuSection();
-        const scroll = new St.ScrollView({style_class: 'moni-scroll', overlay_scrollbars: true});
+        const scroll = this._dashScroll = new St.ScrollView({style_class: 'moni-scroll', overlay_scrollbars: true});
         scroll.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
         scroll.set_child(dash.actor);
         const holder = new PopupMenu.PopupMenuSection();
         holder.actor.add_child(scroll);
         this.menu.addMenuItem(holder);
-        holder.addMenuItem(dash);
+        // dash already belongs to the scroll view; do not reparent it.
 
         const top = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
         const topBox = new St.BoxLayout({vertical: true, style_class: 'moni-dash', x_expand: true});
@@ -438,7 +446,14 @@ class MoniIndicator extends PanelMenu.Button {
 
     _refreshMenu() {
         const st = this._state, c = this._cards;
-        this._castItem.label.text = this._ext.capture.recording ? 'Stop recording' : 'Record screen';
+        const monitor = Main.layoutManager.findMonitorForActor(this);
+        if (monitor) {
+            const work = Main.layoutManager.getWorkAreaForMonitor(monitor.index);
+            this._dashScroll.set_style(`max-height: ${Math.max(80, work.height - 200)}px;`);
+        }
+        this._castItem.label.text = this._ext.capture.recording?.stopping ? 'Stopping recording…'
+            : this._ext.capture.recording ? 'Stop recording' : 'Record screen';
+        this._castItem.setSensitive(!this._ext.capture.recording?.stopping);
         const show = (card, visible) => {
             card.box.visible = visible;
             return visible;
@@ -480,20 +495,24 @@ class MoniIndicator extends PanelMenu.Button {
         }
 
         c.net.value.text = `↓ ${fmtBytes(st.net?.rx)}/s   ↑ ${fmtBytes(st.net?.tx)}/s`;
-        const netParts = [];
+        const seconds = Math.min(HISTORY, Math.ceil(MENU_GRAPH[0] / 2) + 1) * (this._interval ?? 1500) / 1000;
+        const windowLabel = `last ${Math.round(seconds)} s`;
+        c.cpu.detail.text += ` · ${windowLabel}`;
+        c.mem.detail.text += ` · ${windowLabel}`;
+        const netParts = [`↓ RX / ↑ TX · ${windowLabel}`];
         if (this._settings.get_boolean('internet-probe')) {
-            netParts.push(st.online === undefined ? 'Internet …'
-                : st.online ? `Internet ● ${Math.round(st.latency)} ms` : 'Internet ○ offline');
+            netParts.push(st.online === undefined ? 'Probe …'
+                : st.online ? `Probe ● ${Math.round(st.latency)} ms` : 'Probe host unreachable');
         }
         if (st.wifi)
             netParts.push(`Wi-Fi ${st.wifi.iface} ${Math.round(st.wifi.dbm)} dBm`);
         netParts.push('click an address to copy');
-        c.net.detail.text = netParts.join(' · ');
+        c.net.detail.text = netParts.join('\n');
         c.net.graph.queue_repaint();
 
         const mounts = C.listMounts();
         c.disk.value.text = `R ${fmtBytes(st.io?.read)}/s   W ${fmtBytes(st.io?.write)}/s`;
-        c.disk.detail.text = mounts.map(x =>
+        c.disk.detail.text = `R read / W write · ${windowLabel}\n` + mounts.map(x =>
             `${x.mount.length > 12 ? `…${x.mount.slice(-11)}` : x.mount.padEnd(12)} ${bar(x.percent)} ${pct(x.percent).padStart(4)}  ${fmtBytes(x.free)} free`).join('\n');
         c.disk.graph.queue_repaint();
 
@@ -531,13 +550,12 @@ class MoniIndicator extends PanelMenu.Button {
 
         const bags = ros?.bags ?? [];
         if (c.bag.box.visible = s.get_boolean('show-rosbag') && bags.length > 0) {
-            const bag = bags[0];
-            c.bag.value.text = `${fmtBytes(bag.rate)}/s`;
-            c.bag.detail.text = [
-                bag.dir ? (bag.dir.length > 56 ? `…${bag.dir.slice(-55)}` : bag.dir) : 'waiting for output directory…',
-                `written ${fmtBytes(bag.written)} · ${bag.free !== null ? `${fmtBytes(bag.free)} free` : ''}`,
-                bag.eta !== null ? `disk full in ${fmtDuration(bag.eta)}${bag.eta < 600 ? '  ⚠' : ''}` : 'idle / low rate',
-            ].join('\n');
+            c.bag.value.text = `${bags.length} recording${bags.length === 1 ? '' : 's'}`;
+            c.bag.detail.text = bags.map(bag => [
+                bag.dir || 'waiting for output directory…',
+                `${fmtBytes(bag.rate)}/s · written ${fmtBytes(bag.written)} · ${bag.free != null ? `${fmtBytes(bag.free)} free` : 'free space unknown'}`,
+                bag.eta != null ? `disk full in ${fmtDuration(bag.eta)}${bag.eta < 600 ? '  ⚠' : ''}` : 'idle / low rate',
+            ].join('\n')).join('\n\n');
         }
 
         const cans = st.can ?? [];
@@ -556,7 +574,7 @@ class MoniIndicator extends PanelMenu.Button {
 
     _rebuildIpItems() {
         const addrs = this._state.addrs ?? [];
-        const key = JSON.stringify(addrs);
+        const key = JSON.stringify([addrs, this._state.defaultIface]);
         if (key === this._ipKey)
             return;
         this._ipKey = key;
@@ -711,6 +729,8 @@ class MoniIndicator extends PanelMenu.Button {
             });
         }
         this._updatePanel();
+        if (this.menu.isOpen)
+            this._refreshMenu();
     }
 
     _onSetting(key) {

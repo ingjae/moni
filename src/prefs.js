@@ -48,7 +48,7 @@ export default class MoniPreferences extends ExtensionPreferences {
 
         const robo = group('Robotics', 'Badges only appear while there is something to show');
         toggle(robo, 'show-ros', 'ROS 2 node radar', 'Finds processes with librcl.so loaded — never joins DDS');
-        toggle(robo, 'show-rosbag', 'rosbag recording', 'REC badge with write rate and time until the disk is full');
+        toggle(robo, 'show-rosbag', 'rosbag recording', 'BAG badge with write rate and time until the disk is full');
         toggle(robo, 'show-can', 'CAN bus', 'can*/vcan* state, frame rate and error counters');
         toggle(robo, 'show-devices', 'Sensor devices', 'ttyUSB/ttyACM serial, cameras, gamepads');
         toggle(robo, 'notify-devices', 'Notify on plug / unplug');
