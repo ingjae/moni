@@ -5,7 +5,7 @@
 **The top-bar system monitor for people who ship robots.**
 
 CPU · RAM · GPU · network · disk · IP, plus ROS 2 processes, rosbag disk ETA, CAN bus, sensor hotplug
-and Shottr-style screenshots & screen recording. All of it lives in the GNOME panel.
+Shottr-style screenshots & screen recording and a clipboard history. All of it lives in the GNOME panel.
 
 [![GNOME Shell](https://img.shields.io/badge/GNOME_Shell-42_→_48-4A86CF?logo=gnome&logoColor=white)](#compatibility)
 [![Ubuntu](https://img.shields.io/badge/Ubuntu-22.04_|_24.04-E95420?logo=ubuntu&logoColor=white)](#compatibility)
@@ -95,6 +95,24 @@ and is **not woken up** just to be measured.
 
 </td>
 </tr>
+<tr>
+<td valign="top">
+
+### 📋 Clipboard history that pastes for you
+<kbd>Super</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd>: type to search, then Enter or click, and the item is
+**pasted straight into the window you were in**. Terminals get <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd>
+automatically. ★ keeps the `export ROS_DOMAIN_ID=…` you type ten times a day. Password-manager
+copies are never recorded.
+
+</td>
+<td valign="top">
+
+### 💼 Take your setup with you
+Settings → Backup exports every toggle, shortcut and ★ favorite to one readable JSON file. Import it
+on the robot PC and you're done. Unknown or mistyped values are skipped, never coerced.
+
+</td>
+</tr>
 </table>
 
 <p align="center">
@@ -156,6 +174,18 @@ not <kbd>Ctrl</kbd>, so they don't steal *Save As* from your editor, browser or 
 
 The status bar always shows the cursor position in image pixels and the color under it.
 
+### 📋 Clipboard history
+
+| | |
+|---|---|
+| Open | <kbd>Super</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> or the 📋 panel icon (<kbd>Super</kbd>+<kbd>V</kbd> stays GNOME's notification list) |
+| Find | just type: the list filters as you go |
+| Paste | <kbd>Enter</kbd> (first match) or click. Moni restores the text to the clipboard and sends <kbd>Ctrl</kbd>+<kbd>V</kbd> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> in terminals) to the window you came from |
+| Keep | ★ pins an item to the top; favorites are saved, recent items live in memory until logout |
+| Privacy | copies flagged by password managers (`x-kde-passwordManagerHint`) are skipped; text only, up to 100 KB per item |
+
+Turn off *Paste on pick* in Settings if you'd rather have the item copied back without auto-pasting.
+
 ## Install
 
 ```bash
@@ -172,8 +202,8 @@ gnome-extensions enable moni@ingjae.github.io
 Prefer a zip? Grab one from [Releases](https://github.com/ingjae/moni/releases):
 
 ```bash
-gnome-extensions install --force moni@ingjae.github.io.gnome45-48.v0.0.3.zip   # Ubuntu 24.04
-gnome-extensions install --force moni@ingjae.github.io.gnome42-44.v0.0.3.zip   # Ubuntu 22.04
+gnome-extensions install --force moni@ingjae.github.io.gnome45-48.v0.0.4.zip   # Ubuntu 24.04
+gnome-extensions install --force moni@ingjae.github.io.gnome42-44.v0.0.4.zip   # Ubuntu 22.04
 ```
 
 Build requirements: `python3` and `glib-compile-schemas`. Runtime: only what Ubuntu ships with GNOME
@@ -243,6 +273,14 @@ gsettings --schemadir ~/.local/share/gnome-shell/extensions/moni@ingjae.github.i
 | `internet-probe` / `probe-host` | `true` / `1.1.1.1` | TCP-443 latency check |
 | `screenshot-shortcut` / `record-shortcut` | `<Super><Shift>s` / `<Super><Shift>d` | capture shortcuts (empty = off) |
 | `record-cursor` | `true` | show the pointer in recordings |
+| `show-clipboard` / `clipboard-shortcut` | `true` / `<Super><Shift>v` | clipboard history icon + shortcut |
+| `clipboard-paste` | `true` | paste into the focused window on pick |
+| `clipboard-size` | `50` | recent items kept (memory only) |
+| `clipboard-favorites` | `[]` | ★ items |
+
+**Backup.** Settings → Backup → *Export…* writes all of the above to `moni-settings.json`; *Import…* applies it
+(keys are type-checked; unknown ones are skipped). From a shell, `dconf dump /org/gnome/shell/extensions/moni/`
+works too.
 
 When the panel is crowded, chips are hidden in this order, last one first:
 `REC (screen) → BAG → ROS → CAN → CPU → RAM → NET → GPU → DISK → IP`.
@@ -268,6 +306,7 @@ form, so the two builds can't drift apart.
 - CAN **bus-off** is inferred from carrier loss. The exact controller state needs netlink.
 - A **component container** is listed once, not once per node it hosts.
 - The ruler measures what you drag. It doesn't snap to edges the way Shottr does.
+- Clipboard history is **text only** for now; images copied from Moni Shot or other apps aren't listed.
 
 ## Development
 
@@ -276,10 +315,11 @@ src/
   collectors.js   all data collection — GLib/Gio only, testable under plain gjs
   extension.js    panel chips, dashboard, auto-fit, keybindings
   capture.js      area selection, capture, pins, recording
+  clipboard.js    clipboard history, favorites, paste-on-pick
   editor.js       Moni Shot annotation editor (GTK 4, separate process)
   prefs.js        libadwaita 1.1-compatible settings window
 tools/build.py    → build/esm, build/legacy, dist/*.zip
-tests/            collector smoke tests
+tests/            collector smoke tests, settings backup round trip, UI regressions
 ```
 
 ```bash

@@ -25,3 +25,8 @@
 .moni-accel { font-size: 8.5pt; padding-left: 24px; }
 .moni-select-hint { background-color: rgba(0, 0, 0, 0.75); color: #ffffff; border-radius: 6px; padding: 6px 12px; font-size: 10.5pt; }
 .moni-pin { box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55); border: 1px solid rgba(255, 255, 255, 0.25); }
+.moni-clip-search { min-width: 340px; }
+.moni-clip-scroll { max-height: 460px; }
+.moni-clip-header { font-size: 8.5pt; font-weight: bold; }
+.moni-clip-star { padding: 2px 4px; border-radius: 4px; }
+.moni-clip-star:hover { background-color: rgba(128, 128, 128, 0.25); }

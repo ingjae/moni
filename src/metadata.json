@@ -4,6 +4,6 @@
   "description": "Robotics-aware system monitor for the top bar: CPU, RAM, GPU, network, disk, IP — plus ROS 2 nodes, rosbag disk ETA, CAN bus and sensor hotplug. Reads /proc and /sys only.",
   "url": "https://github.com/ingjae/moni",
   "settings-schema": "org.gnome.shell.extensions.moni",
-  "version-name": "0.0.3",
+  "version-name": "0.0.4",
   "shell-version": []
 }

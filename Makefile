@@ -22,11 +22,14 @@ uninstall:
 test: build
 	node tests/ui-regressions.test.cjs
 	gjs -m tests/collectors.test.js
+	GSETTINGS_BACKEND=memory gjs -m tests/settings-backup.test.js
 	gjs -c "imports.searchPath.unshift('build/legacy'); const C = imports.collectors; \
 	  if (!C.readMemory().total || !new C.CpuSampler()) throw new Error('legacy collectors broken'); \
 	  print('ok    legacy collectors load under imports.*');"
 	@for f in build/legacy/*.js; do node --check $$f 2>/dev/null || { echo "FAIL  syntax $$f"; exit 1; }; done; \
 	  command -v node >/dev/null && echo "ok    legacy build parses" || true
+	@for f in src/*.js; do node --input-type=module --check < $$f 2>/dev/null || { echo "FAIL  syntax $$f"; exit 1; }; done; \
+	  command -v node >/dev/null && echo "ok    ESM source parses" || true
 
 test-ui:
 	python3 tests/editor.test.py

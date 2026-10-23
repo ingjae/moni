@@ -18,6 +18,7 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import * as C from './collectors.js';
 import * as Cap from './capture.js';
+import * as Clip from './clipboard.js';
 
 const HISTORY = 180;
 const PANEL_GRAPH_H = 18;
@@ -813,12 +814,35 @@ export default class MoniExtension extends Extension {
             this._addIndicator();
         });
         this._addIndicator();
+        this._clipId = this._settings.connect('changed::show-clipboard', () => this._syncClipboard());
+        this._syncClipboard();
+    }
+
+    // Clipboard history is its own panel icon + shortcut, on only when enabled.
+    _syncClipboard() {
+        const on = this._settings.get_boolean('show-clipboard');
+        if (on && !this._clip) {
+            this._clip = new Clip.ClipboardIndicator(this._settings);
+            Clip.addToPanel(this.uuid, this._clip);
+            Main.wm.addKeybinding('clipboard-shortcut', this._settings, Meta.KeyBindingFlags.IGNORE_AUTOREPEAT,
+                Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW, () => this._clip?.toggle());
+        } else if (!on && this._clip) {
+            Main.wm.removeKeybinding('clipboard-shortcut');
+            this._clip.destroy();
+            this._clip = null;
+        }
     }
 
     disable() {
         for (const key of Object.keys(SHORTCUTS))
             Main.wm.removeKeybinding(key);
         this._settings.disconnect(this._posId);
+        this._settings.disconnect(this._clipId);
+        if (this._clip) {
+            Main.wm.removeKeybinding('clipboard-shortcut');
+            this._clip.destroy();
+            this._clip = null;
+        }
         this._removeIndicator();
         this.capture.destroy();
         this.capture = null;

@@ -20,6 +20,11 @@
     <key name="probe-host" type="s"><default>'1.1.1.1'</default><summary>Latency probe host (TCP 443)</summary></key>
     <key name="screenshot-shortcut" type="as"><default><![CDATA[['<Super><Shift>s']]]></default><summary>Capture an area and open the editor</summary></key>
     <key name="record-shortcut" type="as"><default><![CDATA[['<Super><Shift>d']]]></default><summary>Start / stop screen recording</summary></key>
+    <key name="show-clipboard" type="b"><default>true</default><summary>Clipboard history panel icon</summary></key>
+    <key name="clipboard-shortcut" type="as"><default><![CDATA[['<Super><Shift>v']]]></default><summary>Open clipboard history</summary></key>
+    <key name="clipboard-size" type="i"><default>50</default><summary>Recent items kept (memory only)</summary></key>
+    <key name="clipboard-paste" type="b"><default>true</default><summary>Paste into the focused window on pick</summary></key>
+    <key name="clipboard-favorites" type="as"><default>[]</default><summary>Starred clipboard items</summary></key>
     <key name="record-cursor" type="b"><default>true</default><summary>Show the pointer in recordings</summary></key>
   </schema>
 </schemalist>
