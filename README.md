@@ -4,7 +4,7 @@
 
 **The top-bar system monitor for people who ship robots.**
 
-CPU · RAM · GPU · network · disk · IP, plus ROS 2 processes, rosbag disk ETA, CAN bus, sensor hotplug
+CPU · RAM · GPU · network · disk · IP, plus ROS 2 processes, rosbag disk ETA, CAN bus, PM2 apps, Docker containers, sensor hotplug
 Shottr-style screenshots & screen recording and a clipboard history. All of it lives in the GNOME panel.
 
 [![GNOME Shell](https://img.shields.io/badge/GNOME_Shell-42_→_48-4A86CF?logo=gnome&logoColor=white)](#compatibility)
@@ -15,7 +15,7 @@ Shottr-style screenshots & screen recording and a clipboard history. All of it l
 
 <img src="docs/panel.png" alt="Moni in the GNOME top bar: BAG badge with time until disk full, ROS process count, CAN frame rate, CPU/RAM/GPU/NET sparklines and disk usage" width="100%">
 
-[Highlights](#-highlights) · [Features](#features) · [Install](#install) · [How it works](#how-it-works) · [Configuration](#configuration)
+[GitHub](https://github.com/ingjae/moni) · [Highlights](#-highlights) · [Features](#features) · [Install](#install) · [How it works](#how-it-works) · [Configuration](#configuration)
 
 </div>
 
@@ -146,6 +146,8 @@ the panel stays clean when no robot is running.
 | `ROS 7` | ROS 2 processes are running | process table (node / launch / bag / container / CLI) with CPU and RSS, domain, distro, RMW, ⚠ on mixed domains |
 | `● BAG 14m` | `ros2 bag record` is running | output dir, write rate, size written, free space, **time until disk full** |
 | `CAN 1.2k` | a CAN bus has traffic or errors | per-interface state, rx/tx frames/s, errors, virtual/physical |
+| `PM2 2/3` | the PM2 daemon in `~/.pm2` has apps | online/stopped/errored, CPU, memory, restarts, uptime, last exit code. Turns red on an errored app or a crash loop (3+ crashes in 5 min) and notifies you. Read from `~/.pm2` files and `/proc`, never by polling the `pm2` CLI |
+| `DOCKER 3` | containers are running | running/exited containers with CPU, memory and status. Turns red while one is unhealthy, restarting or crash-looping (3+ restarts in 5 min); notifies on a non-zero exit, a restart or a failing health check. One request to the Docker Engine socket every 3 s plus the containers' cgroup files — no `docker` CLI |
 | — | a sensor is plugged / unplugged | serial devices by `/dev/serial/by-id` name, cameras, gamepads + notifications |
 
 ### 📸 Capture
@@ -202,8 +204,8 @@ gnome-extensions enable moni@ingjae.github.io
 Prefer a zip? Grab one from [Releases](https://github.com/ingjae/moni/releases):
 
 ```bash
-gnome-extensions install --force moni@ingjae.github.io.gnome45-48.v0.0.4.zip   # Ubuntu 24.04
-gnome-extensions install --force moni@ingjae.github.io.gnome42-44.v0.0.4.zip   # Ubuntu 22.04
+gnome-extensions install --force moni@ingjae.github.io.gnome45-48.v0.0.5.zip   # Ubuntu 24.04
+gnome-extensions install --force moni@ingjae.github.io.gnome42-44.v0.0.5.zip   # Ubuntu 22.04
 ```
 
 Build requirements: `python3` and `glib-compile-schemas`. Runtime: only what Ubuntu ships with GNOME
@@ -270,6 +272,8 @@ gsettings --schemadir ~/.local/share/gnome-shell/extensions/moni@ingjae.github.i
 | `show-cpu` `show-ram` `show-gpu` `show-net` `show-disk` `show-ip` | `true` | panel chips |
 | `show-ros` `show-rosbag` `show-can` `show-devices` | `true` | robotics mode |
 | `notify-devices` | `true` | plug / unplug notifications |
+| `show-pm2` / `notify-pm2` | `true` / `true` | PM2 badge + card / crash and errored notifications |
+| `show-docker` / `notify-docker` | `true` / `true` | Docker badge + card / exit, restart and unhealthy notifications |
 | `internet-probe` / `probe-host` | `true` / `1.1.1.1` | TCP-443 latency check |
 | `screenshot-shortcut` / `record-shortcut` | `<Super><Shift>s` / `<Super><Shift>d` | capture shortcuts (empty = off) |
 | `record-cursor` | `true` | show the pointer in recordings |
@@ -283,7 +287,7 @@ gsettings --schemadir ~/.local/share/gnome-shell/extensions/moni@ingjae.github.i
 works too.
 
 When the panel is crowded, chips are hidden in this order, last one first:
-`REC (screen) → BAG → ROS → CAN → CPU → RAM → NET → GPU → DISK → IP`.
+`REC (screen) → BAG → ROS → CAN → PM2 → DOCKER → CPU → RAM → NET → GPU → DISK → IP`.
 
 ## Compatibility
 
@@ -305,6 +309,10 @@ form, so the two builds can't drift apart.
 - **Intel iGPU** utilisation isn't shown, because it needs perf counters / root.
 - CAN **bus-off** is inferred from carrier loss. The exact controller state needs netlink.
 - A **component container** is listed once, not once per node it hosts.
+- PM2 is read from `~/.pm2` of the logged-in user. A PM2 running as root or with a custom `PM2_HOME` isn't seen.
+  Restart counts come from `pm2.log`, so they cover what is still in that log.
+- Docker needs read access to `/run/docker.sock` (the `docker` group) or a rootless socket in `$XDG_RUNTIME_DIR`.
+  Restart counts start when Moni starts. Podman isn't supported.
 - The ruler measures what you drag. It doesn't snap to edges the way Shottr does.
 - Clipboard history is **text only** for now; images copied from Moni Shot or other apps aren't listed.
 
@@ -341,6 +349,12 @@ make logs      # follow gnome-shell logs filtered for moni
 
 [Vitals], [TopHat], [system-monitor-next] and [Astra Monitor] showed how good a GNOME panel monitor can be.
 [Shottr] set the bar for what a screenshot tool should feel like.
+
+## Feedback
+
+Found a bug, have a question or an idea? Please open an issue:
+**[github.com/ingjae/moni/issues](https://github.com/ingjae/moni/issues)**. You can also get there from
+Settings → About → *Report an issue*. Including your Ubuntu/GNOME version and `make logs` output helps.
 
 ## License
 

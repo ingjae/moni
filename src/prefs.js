@@ -7,6 +7,7 @@ import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/ex
 
 const POSITIONS = ['left', 'center', 'right'];
 const FORMAT = 'moni-settings';
+const REPO = 'https://github.com/ingjae/moni';
 
 // Every schema key as plain JSON, so the file is readable and diffable.
 function exportSettings(settings) {
@@ -54,13 +55,15 @@ export default class MoniPreferences extends ExtensionPreferences {
         const page = new Adw.PreferencesPage({title: 'Moni', icon_name: 'utilities-system-monitor-symbolic'});
         window.add(page);
 
+        // Adw parses titles as Pango markup: '&' and '<Super>' must be escaped.
+        const esc = t => GLib.markup_escape_text(t, -1);
         const group = (title, description = '') => {
-            const g = new Adw.PreferencesGroup({title, description});
+            const g = new Adw.PreferencesGroup({title: esc(title), description: esc(description)});
             page.add(g);
             return g;
         };
         const row = (g, title, subtitle, widget) => {
-            const r = new Adw.ActionRow({title, subtitle});
+            const r = new Adw.ActionRow({title: esc(title), subtitle: esc(subtitle)});
             widget.valign = Gtk.Align.CENTER;
             r.add_suffix(widget);
             r.activatable_widget = widget;
@@ -92,6 +95,10 @@ export default class MoniPreferences extends ExtensionPreferences {
         toggle(robo, 'show-can', 'CAN bus', 'can*/vcan* state, frame rate and error counters');
         toggle(robo, 'show-devices', 'Sensor devices', 'ttyUSB/ttyACM serial, cameras, gamepads');
         toggle(robo, 'notify-devices', 'Notify on plug / unplug');
+        toggle(robo, 'show-pm2', 'PM2 processes', 'Apps in ~/.pm2: status, CPU, memory, restarts — no pm2 CLI polling');
+        toggle(robo, 'notify-pm2', 'Notify on PM2 crash', 'When an app exits non-zero or ends up errored');
+        toggle(robo, 'show-docker', 'Docker containers', 'Running containers, CPU, memory, health — via the Engine socket, no docker CLI');
+        toggle(robo, 'notify-docker', 'Notify on container trouble', 'Non-zero exit, restart loop or unhealthy');
 
         const net = group('Internet check');
         toggle(net, 'internet-probe', 'Measure latency', 'TCP connect to the host below every 10 s');
@@ -181,5 +188,11 @@ export default class MoniPreferences extends ExtensionPreferences {
                     title: `Imported ${applied} settings${skipped ? ` · ${skipped} skipped` : ''}`,
                 }));
             })));
+
+        const about = group('About', 'Bugs, questions and ideas: please open a GitHub issue.');
+        const link = (title, subtitle, label, uri) =>
+            row(about, title, subtitle, new Gtk.LinkButton({label, uri}));
+        link('GitHub', 'Source code, releases and docs', 'github.com/ingjae/moni', REPO);
+        link('Report an issue', 'Bugs, questions, feature requests', 'Open issue', `${REPO}/issues/new`);
     }
 }

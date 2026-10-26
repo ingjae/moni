@@ -33,6 +33,8 @@ const COLOR = {
     disk: [0.98, 0.75, 0.14],
     ros: [0.13, 0.83, 0.93],
     can: [0.98, 0.57, 0.24],
+    pm2: [0.40, 0.85, 0.75],
+    docker: [0.13, 0.59, 0.95],
     dev: [0.75, 0.85, 0.30],
     rec: [0.97, 0.33, 0.33],
 };
@@ -62,8 +64,10 @@ function fmtDuration(s) {
     return h >= 48 ? `${Math.floor(h / 24)}d` : `${h}h${String(Math.floor(s % 3600 / 60)).padStart(2, '0')}m`;
 }
 
+const dockerTrouble = c => c.state === 'restarting' || c.state === 'dead' || c.health === 'unhealthy' || c.crashLoop;
+
 // Most important first: transient robotics alerts survive a crowded panel.
-const FIT_PRIORITY = ['shot', 'rec', 'ros', 'can', 'cpu', 'ram', 'net', 'gpu', 'disk', 'ip'];
+const FIT_PRIORITY = ['shot', 'rec', 'ros', 'can', 'pm2', 'docker', 'cpu', 'ram', 'net', 'gpu', 'disk', 'ip'];
 
 // '<Super><Shift>s' -> 'Super+Shift+S'
 const fmtAccel = a => (a ?? '').replace(/<(\w+)>/g, '$1+').replace(/\+([a-z])$/, (_m, k) => `+${k.toUpperCase()}`);
@@ -202,6 +206,8 @@ class MoniIndicator extends PanelMenu.Button {
         this._gpu = new C.GpuSampler();
         this._ros = new C.RosRadar();
         this._can = new C.CanMonitor();
+        this._pm2 = new C.Pm2Monitor();
+        this._docker = new C.DockerMonitor();
         this._ticks = -1;
         this._ipKey = '';
 
@@ -261,6 +267,10 @@ class MoniIndicator extends PanelMenu.Button {
             chip('ros', 'ROS', null, 100, 'moni-badge moni-badge-ros');
         if (s.get_boolean('show-can'))
             chip('can', 'CAN', null, 100, 'moni-badge moni-badge-can');
+        if (s.get_boolean('show-pm2'))
+            chip('pm2', 'PM2', null, 100, 'moni-badge moni-badge-pm2');
+        if (s.get_boolean('show-docker'))
+            chip('docker', 'DOCKER', null, 100, 'moni-badge moni-badge-docker');
         if (s.get_boolean('show-cpu'))
             chip('cpu', 'CPU', [{history: this._h.cpu, color: COLOR.cpu, fill: true}]);
         if (s.get_boolean('show-ram'))
@@ -325,6 +335,19 @@ class MoniIndicator extends PanelMenu.Button {
         const canAlert = cans.some(c => c.state !== 'UP');
         set('can', canAlert ? 'BUS?' : fmtCount(fps), fps > 0 || canAlert);
         this._chips.can?.box[canAlert ? 'add_style_class_name' : 'remove_style_class_name']('moni-alert');
+
+        // PM2: shown while the daemon runs; red on errored apps or a crash loop.
+        const pm2 = st.pm2?.apps ?? [];
+        const pm2Alert = pm2.some(a => a.status === 'errored' || a.crashLoop);
+        set('pm2', `${pm2.filter(a => a.status === 'online').length}/${pm2.length}${pm2Alert ? ' ⚠' : ''}`, pm2.length > 0);
+        this._chips.pm2?.box[pm2Alert ? 'add_style_class_name' : 'remove_style_class_name']('moni-alert');
+
+        // Docker: running containers; red while one restarts or is unhealthy.
+        const ctrs = st.docker ?? [];
+        const up = ctrs.filter(c => c.state === 'running').length;
+        const dockerAlert = ctrs.some(dockerTrouble);
+        set('docker', `${up}${dockerAlert ? ' ⚠' : ''}`, up > 0 || dockerAlert);
+        this._chips.docker?.box[dockerAlert ? 'add_style_class_name' : 'remove_style_class_name']('moni-alert');
         this._fitPanel();
         this._fallback.visible = !Object.values(this._chips).some(c => c.box.visible);
         const hiddenAlert = Object.values(this._chips).some(c => c.fitHidden && c.box.has_style_class_name('moni-alert'));
@@ -457,8 +480,10 @@ class MoniIndicator extends PanelMenu.Button {
         card(bottomBox, 'ros', 'ROS 2', COLOR.ros).finish();
         card(bottomBox, 'bag', 'rosbag', COLOR.rec).finish();
         card(bottomBox, 'can', 'CAN bus', COLOR.can).finish();
+        card(bottomBox, 'pm2', 'PM2', COLOR.pm2).finish();
+        card(bottomBox, 'docker', 'Docker', COLOR.docker).finish();
         card(bottomBox, 'dev', 'Sensors', COLOR.dev).finish();
-        for (const k of ['ros', 'bag', 'can', 'dev'])
+        for (const k of ['ros', 'bag', 'can', 'pm2', 'docker', 'dev'])
             cards[k].detail.add_style_class_name('moni-mono');
         cards.disk.detail.add_style_class_name('moni-mono');
 
@@ -602,6 +627,42 @@ class MoniIndicator extends PanelMenu.Button {
                 `${x.name.padEnd(7)} ${x.state.padEnd(10)} ▼${fmtCount(x.rxFps).padStart(5)}/s ▲${fmtCount(x.txFps).padStart(5)}/s  err ${x.errors}${x.virtual ? '  (virtual)' : ''}`).join('\n');
         }
 
+        const pm2 = st.pm2?.apps ?? [];
+        if (c.pm2.box.visible = s.get_boolean('show-pm2') && pm2.length > 0) {
+            const on = pm2.filter(a => a.status === 'online');
+            c.pm2.value.text = `${on.length}/${pm2.length} online · ${on.reduce((t, a) => t + a.cpu, 0).toFixed(0)}% · ${fmtBytes(on.reduce((t, a) => t + a.rss, 0))}`;
+            // Same width budget as the ROS table (~46 mono chars).
+            const rows = pm2.slice(0, 12).map(a => {
+                const name = `${a.name}:${a.id}`;
+                const status = a.crashLoop && a.status === 'online' ? 'looping' : a.status;
+                const on = a.status === 'online';
+                const tail = on ? fmtDuration(a.uptime)
+                    : a.lastExit && a.lastExit.code !== 0 ? `exit ${a.lastExit.code ?? a.lastExit.signal}` : '';
+                return `${(name.length > 16 ? `${name.slice(0, 15)}…` : name).padEnd(16)} ${status.padEnd(7)} ` +
+                    `${(on ? `${a.cpu.toFixed(1)}%` : '').padStart(5)} ${(on ? fmtBytes(a.rss) : '').padStart(5)} ` +
+                    `${String(a.restarts).padStart(3)} ${tail}`;
+            });
+            if (pm2.length > 12)
+                rows.push(`… ${pm2.length - 12} more`);
+            c.pm2.detail.text = [`${'APP'.padEnd(16)} ${'STATUS'.padEnd(7)} ${'CPU'.padStart(5)} ${'MEM'.padStart(5)} ${'↺'.padStart(3)} UP`, ...rows].join('\n');
+        }
+
+        const ctrs = st.docker ?? [];
+        if (c.docker.box.visible = s.get_boolean('show-docker') && ctrs.length > 0) {
+            const run = ctrs.filter(x => x.state === 'running');
+            c.docker.value.text = `${run.length}/${ctrs.length} running · ${run.reduce((t, x) => t + x.cpu, 0).toFixed(0)}% · ${fmtBytes(run.reduce((t, x) => t + x.mem, 0))}`;
+            const rows = ctrs.slice(0, 12).map(x => {
+                const on = x.state === 'running';
+                const status = `${C.compactDockerStatus(x.status)}${x.restarts ? ` ↺${x.restarts}` : ''}`;
+                return `${(x.name.length > 16 ? `${x.name.slice(0, 15)}…` : x.name).padEnd(16)} ` +
+                    `${(on ? `${x.cpu.toFixed(1)}%` : '').padStart(5)} ${(on ? fmtBytes(x.mem) : '').padStart(5)} ` +
+                    `${status}${dockerTrouble(x) ? '  ⚠' : ''}`;
+            });
+            if (ctrs.length > 12)
+                rows.push(`… ${ctrs.length - 12} more`);
+            c.docker.detail.text = [`${'CONTAINER'.padEnd(16)} ${'CPU'.padStart(5)} ${'MEM'.padStart(5)} STATUS`, ...rows].join('\n');
+        }
+
         const devs = this._devices ?? [];
         if (c.dev.box.visible = s.get_boolean('show-devices') && devs.length > 0) {
             c.dev.value.text = `${devs.length} connected`;
@@ -688,8 +749,77 @@ class MoniIndicator extends PanelMenu.Button {
             st.ros = this._ros.scan();
         if (s.get_boolean('show-can'))
             st.can = this._can.sample();
+        if (s.get_boolean('show-pm2') && every(3000)) {
+            const prev = st.pm2;
+            st.pm2 = this._pm2.scan();
+            this._notifyPm2(prev, st.pm2);
+        } else if (!s.get_boolean('show-pm2')) {
+            st.pm2 = null;
+        }
+        if (s.get_boolean('show-docker') && every(3000)) {
+            this._docker.poll(this._cancellable, list => {
+                if (this._destroyed || !this._settings.get_boolean('show-docker'))
+                    return;
+                const prev = st.docker;
+                st.docker = list;
+                this._notifyDocker(prev, list);
+                this._updatePanel();
+            });
+        } else if (!s.get_boolean('show-docker')) {
+            st.docker = null;
+        }
         if (every(10000))
             this._refreshNetwork();
+    }
+
+    // A container that died with a non-zero code, started restarting or went
+    // unhealthy. Once per container per minute, none for the first poll.
+    _notifyDocker(prev, cur) {
+        if (!prev || !cur || !this._settings.get_boolean('notify-docker'))
+            return;
+        const before = new Map(prev.map(x => [x.id, x]));
+        const now = GLib.get_monotonic_time() / 1e6;
+        this._dockerNotified ??= new Map();
+        for (const x of cur) {
+            const b = before.get(x.id);
+            if (!b || now - (this._dockerNotified.get(x.id) ?? 0) < 60)
+                continue;
+            let body = null;
+            if (x.restarts > b.restarts || (x.state === 'restarting' && b.state !== 'restarting'))
+                body = x.restarts ? `restarted (${x.restarts}× since login)` : 'restarting';
+            else if (x.state === 'exited' && b.state !== 'exited' && x.exitCode !== 0)
+                body = `exited with code ${x.exitCode}`;
+            else if (x.health === 'unhealthy' && b.health !== 'unhealthy')
+                body = 'health check failing';
+            if (!body)
+                continue;
+            this._dockerNotified.set(x.id, now);
+            Main.notify(`Docker: ${x.name}`, `${body} · ${x.image}`);
+        }
+    }
+
+    // A crash (non-zero exit → restart) or an app giving up ("errored").
+    // At most one notification per app per minute, none for the first scan.
+    _notifyPm2(prev, cur) {
+        if (!prev || !cur || !this._settings.get_boolean('notify-pm2'))
+            return;
+        const before = new Map(prev.apps.map(a => [`${a.name}:${a.id}`, a]));
+        const now = GLib.get_monotonic_time() / 1e6;
+        this._pm2Notified ??= new Map();
+        for (const a of cur.apps) {
+            const b = before.get(`${a.name}:${a.id}`);
+            if (!b)
+                continue;
+            const errored = a.status === 'errored' && b.status !== 'errored';
+            const crashed = a.restarts > b.restarts && a.lastExit?.code !== 0;
+            const key = `${a.name}:${a.id}`;
+            if ((!errored && !crashed) || (!errored && now - (this._pm2Notified.get(key) ?? 0) < 60))
+                continue;
+            this._pm2Notified.set(key, now);
+            Main.notify(errored ? `PM2: ${a.name} errored` : `PM2: ${a.name} crashed`,
+                errored ? `Stopped after ${a.restarts} restarts (exit ${a.lastExit?.code ?? '?'})`
+                    : `exit ${a.lastExit?.code ?? a.lastExit?.signal} · restarted (${a.restarts} so far)`);
+        }
     }
 
     _refreshNetwork() {

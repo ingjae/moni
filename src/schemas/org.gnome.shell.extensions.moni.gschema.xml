@@ -15,6 +15,10 @@
     <key name="show-rosbag" type="b"><default>true</default><summary>rosbag recording badge</summary></key>
     <key name="show-can" type="b"><default>true</default><summary>CAN bus monitor</summary></key>
     <key name="show-devices" type="b"><default>true</default><summary>Sensor device list</summary></key>
+    <key name="show-pm2" type="b"><default>true</default><summary>PM2 process monitor</summary></key>
+    <key name="notify-pm2" type="b"><default>true</default><summary>Notify when a PM2 app crashes or errors</summary></key>
+    <key name="show-docker" type="b"><default>true</default><summary>Docker container monitor</summary></key>
+    <key name="notify-docker" type="b"><default>true</default><summary>Notify when a container dies, restarts or turns unhealthy</summary></key>
     <key name="notify-devices" type="b"><default>true</default><summary>Notify on device plug/unplug</summary></key>
     <key name="internet-probe" type="b"><default>true</default><summary>Measure internet latency</summary></key>
     <key name="probe-host" type="s"><default>'1.1.1.1'</default><summary>Latency probe host (TCP 443)</summary></key>

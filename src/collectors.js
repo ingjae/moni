@@ -671,3 +671,282 @@ export function listSensorDevices() {
     }
     return out.sort((a, b) => a.dev.localeCompare(b.dev, undefined, {numeric: true}));
 }
+
+// ── PM2 ─────────────────────────────────────────────────────────────────
+//
+// No `pm2 jlist` (a Node start-up every poll). Running apps come from
+// $PM2_HOME/pids/<name>-<id>.pid + /proc; restarts, exit codes and the
+// errored/stopped states come from the new lines of $PM2_HOME/pm2.log.
+
+const PM2_EXIT = /App \[(.+?):(\d+)\] exited with code \[(-?\d+|null)\] via signal \[(\w+)\]/;
+const PM2_START = /App \[(.+?):(\d+)\] starting in -(fork|cluster) mode-/;
+const PM2_ERRORED = /Script .+? had too many unstable restarts \((\d+)\)\. Stopped\. "errored"/;
+const PM2_STOP = /Stopping app:(.+?) id:(\d+)/;
+const PM2_DELETE = /Deleting process (\d+)/;
+const CRASH_WINDOW = 300; // s: this many restarts inside it = crash loop
+
+export function parsePm2Log(text, apps, now = Date.now() / 1000) {
+    const app = (name, id) => {
+        const key = `${name}:${id}`;
+        if (!apps.has(key))
+            apps.set(key, {name, id: Number(id), starts: 0, restarts: 0, crashes: [], lastExit: null, state: null});
+        return apps.get(key);
+    };
+    let lastErroredName = null;
+    for (const line of text.split('\n')) {
+        // "2026-10-26T14:54:21: PM2 log: …" is local time; crash-loop age uses it,
+        // so history read at start-up doesn't look like a fresh crash.
+        const ts = Date.parse(line.slice(0, 19));
+        const at = Number.isNaN(ts) ? now : ts / 1000;
+        let m;
+        if ((m = line.match(PM2_START))) {
+            const a = app(m[1], m[2]);
+            // Only an automatic restart (start right after an exit) counts, like
+            // PM2's own restart_time; a manual start after stop/errored doesn't.
+            if (a.state === 'exited')
+                a.restarts++;
+            a.starts++;
+            a.state = 'online';
+        } else if ((m = line.match(PM2_EXIT))) {
+            const a = app(m[1], m[2]);
+            a.lastExit = {code: m[3] === 'null' ? null : Number(m[3]), signal: m[4]};
+            if (a.lastExit.code !== 0 && a.state !== 'stopping') {
+                a.crashes.push(at);
+                lastErroredName = a;
+            }
+            a.state = a.state === 'stopping' ? 'stopped' : 'exited';
+        } else if ((m = line.match(PM2_ERRORED)) && lastErroredName) {
+            lastErroredName.state = 'errored';
+        } else if ((m = line.match(PM2_STOP))) {
+            app(m[1], m[2]).state = 'stopping';
+        } else if ((m = line.match(PM2_DELETE))) {
+            for (const [k, a] of apps) {
+                if (a.id === Number(m[1]))
+                    apps.delete(k);
+            }
+        }
+    }
+    for (const a of apps.values())
+        a.crashes = a.crashes.filter(t => now - t < CRASH_WINDOW);
+    return apps;
+}
+
+export class Pm2Monitor {
+    constructor(home = `${GLib.get_home_dir()}/.pm2`) {
+        this.home = home;
+        this._apps = new Map();
+        this._offset = -1;
+        this._ticks = new Map();
+        this._t = 0;
+    }
+
+    _readNewLog() {
+        const path = `${this.home}/pm2.log`;
+        try {
+            const file = Gio.File.new_for_path(path);
+            const size = file.query_info('standard::size', Gio.FileQueryInfoFlags.NONE, null).get_size();
+            if (this._offset < 0 || size < this._offset) // first read or rotated
+                this._offset = Math.max(0, size - 256 * 1024);
+            if (size === this._offset)
+                return '';
+            const stream = file.read(null);
+            stream.seek(this._offset, GLib.SeekType.SET, null);
+            const bytes = stream.read_bytes(size - this._offset, null);
+            stream.close(null);
+            this._offset = size;
+            return decoder.decode(bytes.toArray());
+        } catch (e) {
+            return '';
+        }
+    }
+
+    scan() {
+        const daemonPid = readInt(`${this.home}/pm2.pid`);
+        if (daemonPid === null || !exists(`/proc/${daemonPid}`))
+            return null;
+        parsePm2Log(this._readNewLog(), this._apps);
+
+        const now = GLib.get_monotonic_time() / 1e6;
+        const dt = now - this._t;
+        this._t = now;
+        const uptime = parseFloat(readText('/proc/uptime') ?? '0');
+        const running = new Map();
+        for (const f of listDir(`${this.home}/pids`)) {
+            const m = f.match(/^(.+)-(\d+)\.pid$/);
+            const pid = m ? readInt(`${this.home}/pids/${f}`) : null;
+            const stat = pid !== null ? readStat(pid) : null;
+            if (!stat)
+                continue;
+            const ticks = stat.utime + stat.stime;
+            const prev = this._ticks.get(pid);
+            this._ticks.set(pid, ticks);
+            running.set(`${m[1]}:${m[2]}`, {
+                pid,
+                cpu: prev !== undefined && dt > 0 ? 100 * (ticks - prev) / CLK_TCK / dt : 0,
+                rss: stat.rss * PAGE,
+                uptime: uptime - stat.start / CLK_TCK,
+            });
+        }
+        for (const pid of this._ticks.keys()) {
+            if (![...running.values()].some(r => r.pid === pid))
+                this._ticks.delete(pid);
+        }
+
+        const keys = new Set([...running.keys(), ...this._apps.keys()]);
+        const apps = [...keys].map(key => {
+            const log = this._apps.get(key) ?? {};
+            const [name, id] = key.split(/:(?=\d+$)/);
+            const run = running.get(key);
+            const status = run ? 'online' : log.state === 'errored' ? 'errored' : 'stopped';
+            return {
+                name, id: Number(id), status,
+                pid: run?.pid ?? null, cpu: run?.cpu ?? 0, rss: run?.rss ?? 0, uptime: run?.uptime ?? null,
+                restarts: log.restarts ?? 0, lastExit: log.lastExit ?? null,
+                crashLoop: (log.crashes?.length ?? 0) >= 3,
+            };
+        }).sort((a, b) => a.id - b.id);
+        return {daemonPid, apps};
+    }
+}
+
+// ── Docker ──────────────────────────────────────────────────────────────
+//
+// One GET /containers/json on the Engine socket (no docker CLI), then CPU
+// and memory straight from each running container's cgroup.
+
+const DOCKER_SOCKETS = ['/run/docker.sock', `${GLib.getenv('XDG_RUNTIME_DIR') ?? ''}/docker.sock`];
+const CGROUP_DIRS = ['/sys/fs/cgroup/system.slice/docker-%s.scope', '/sys/fs/cgroup/docker/%s'];
+
+// Engine list JSON → [{id, name, image, state, status, exitCode, health}]
+export function parseDockerList(json) {
+    return JSON.parse(json).map(c => ({
+        id: c.Id,
+        name: (c.Names?.[0] ?? c.Id.slice(0, 12)).replace(/^\//, ''),
+        image: c.Image,
+        state: c.State, // running, exited, restarting, paused, created, dead
+        status: c.Status ?? '',
+        exitCode: Number((c.Status ?? '').match(/^Exited \((-?\d+)\)/)?.[1] ?? NaN),
+        health: (c.Status ?? '').match(/\((healthy|unhealthy|health: starting)\)/)?.[1] ?? null,
+    }));
+}
+
+// 'Up 3 days (unhealthy)' → 'Up 3d unhealthy', 'Exited (1) 2 minutes ago' → 'Exited (1) 2m'
+export function compactDockerStatus(status) {
+    const unit = {second: 's', minute: 'm', hour: 'h', day: 'd', week: 'w', month: 'mo', year: 'y'};
+    return status
+        .replace(/ ago$/, '')
+        .replace(/Less than a second/, '<1s')
+        .replace(/About an? (\w+?)s?\b/, (_m, u) => `1${unit[u] ?? ` ${u}`}`)
+        .replace(/(\d+) (\w+?)s?\b/g, (m, n, u) => unit[u] ? `${n}${unit[u]}` : m)
+        .replace(/\((unhealthy|healthy)\)/, '$1')
+        .replace(/\(health: starting\)/, 'starting');
+}
+
+// GET path over a unix socket; callback(body or null). HTTP/1.0 = no chunking.
+function unixGet(socket, path, cancellable, callback) {
+    const client = new Gio.SocketClient({timeout: 3});
+    client.connect_async(Gio.UnixSocketAddress.new(socket), cancellable, (c, res) => {
+        try {
+            const conn = c.connect_finish(res);
+            conn.output_stream.write_all(new TextEncoder().encode(`GET ${path} HTTP/1.0\r\nHost: docker\r\n\r\n`), null);
+            const sink = Gio.MemoryOutputStream.new_resizable();
+            sink.splice_async(conn.input_stream,
+                Gio.OutputStreamSpliceFlags.CLOSE_SOURCE | Gio.OutputStreamSpliceFlags.CLOSE_TARGET,
+                GLib.PRIORITY_DEFAULT, cancellable, (s, r) => {
+                    try {
+                        s.splice_finish(r);
+                        conn.close(null);
+                        const text = decoder.decode(s.steal_as_bytes().toArray());
+                        const split = text.indexOf('\r\n\r\n');
+                        callback(/^HTTP\/1\.\d 200/.test(text) && split > 0 ? text.slice(split + 4) : null);
+                    } catch (e) {
+                        callback(null);
+                    }
+                });
+        } catch (e) {
+            callback(null);
+        }
+    });
+}
+
+export class DockerMonitor {
+    constructor(sockets = DOCKER_SOCKETS) {
+        this.socket = sockets.find(exists) ?? null;
+        this._cpu = new Map();
+        this._init = new Map();
+        this._restarts = new Map(); // id → restart times seen since Moni started
+        this._busy = false;
+    }
+
+    _cgroup(id) {
+        for (const pattern of CGROUP_DIRS) {
+            const dir = pattern.replace('%s', id);
+            const usec = (readText(`${dir}/cpu.stat`) ?? '').match(/usage_usec (\d+)/)?.[1];
+            if (usec !== undefined)
+                return {
+                    usec: Number(usec), mem: readInt(`${dir}/memory.current`, 0),
+                    init: readInt(`${dir}/cgroup.procs`), // first line = container init
+                };
+        }
+        return null;
+    }
+
+    // callback(null) when there is no reachable daemon.
+    poll(cancellable, callback) {
+        if (!this.socket || this._busy)
+            return;
+        this._busy = true;
+        unixGet(this.socket, '/containers/json?all=1', cancellable, body => {
+            this._busy = false;
+            let list;
+            try {
+                list = body !== null ? parseDockerList(body) : null;
+            } catch (e) {
+                list = null;
+            }
+            if (!list) {
+                callback(null);
+                return;
+            }
+            const now = GLib.get_monotonic_time();
+            const seen = new Set();
+            for (const c of list) {
+                c.cpu = 0;
+                c.mem = 0;
+                const cg = c.state === 'running' ? this._cgroup(c.id) : null;
+                if (!cg)
+                    continue;
+                seen.add(c.id);
+                const prev = this._cpu.get(c.id);
+                this._cpu.set(c.id, {usec: cg.usec, t: now});
+                c.cpu = prev && now > prev.t ? 100 * (cg.usec - prev.usec) / (now - prev.t) : 0;
+                c.mem = cg.mem;
+                // Restart policies bring a container back within ~100 ms, too
+                // fast to ever see "restarting": a new init PID gives it away.
+                const init = this._init.get(c.id);
+                if (init && cg.init && init !== cg.init)
+                    this._restarts.set(c.id, [...this._restarts.get(c.id) ?? [], now / 1e6]);
+                if (cg.init)
+                    this._init.set(c.id, cg.init);
+            }
+            for (const id of this._cpu.keys()) {
+                if (!seen.has(id))
+                    this._cpu.delete(id);
+            }
+            const ids = new Set(list.map(c => c.id));
+            for (const map of [this._init, this._restarts]) {
+                for (const id of map.keys()) {
+                    if (!ids.has(id))
+                        map.delete(id);
+                }
+            }
+            for (const c of list) {
+                const times = this._restarts.get(c.id) ?? [];
+                c.restarts = times.length;
+                c.crashLoop = times.filter(t => now / 1e6 - t < CRASH_WINDOW).length >= 3;
+            }
+            const rank = c => c.state === 'running' ? 0 : c.state === 'exited' || c.state === 'created' ? 2 : 1;
+            callback(list.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name)));
+        });
+    }
+}

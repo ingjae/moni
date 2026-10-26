@@ -9,6 +9,8 @@
 .moni-badge .moni-chip-label, .moni-badge .moni-value { font-size: 8.5pt; font-weight: bold; min-width: 0; }
 .moni-badge-ros { background-color: rgba(34, 211, 238, 0.20); color: #67e8f9; }
 .moni-badge-can { background-color: rgba(251, 146, 60, 0.20); color: #fdba74; }
+.moni-badge-pm2 { background-color: rgba(45, 212, 191, 0.20); color: #5eead4; }
+.moni-badge-docker { background-color: rgba(33, 150, 243, 0.22); color: #7cc4fa; }
 .moni-badge-rec { background-color: rgba(248, 84, 84, 0.22); color: #fca5a5; }
 .moni-alert { background-color: rgba(239, 68, 68, 0.85); color: #ffffff; }
 

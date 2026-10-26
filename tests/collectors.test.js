@@ -31,6 +31,41 @@ const py = C.describeRosProcess(['/usr/bin/python3', '-u', '/opt/ros/humble/lib/
 check('describe: python node', py.name === 'talker' && py.pkg === 'demo_nodes_py');
 check('describe: daemon', C.describeRosProcess(['/usr/bin/python3', '/opt/ros/humble/bin/_ros2_daemon'], {}).role === 'daemon');
 
+// PM2 log parsing (formats taken from PM2 7.1.1)
+const local = sec => { const d = new Date(Date.now() - sec * 1000); const p = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; };
+const pm2log = [
+    `${local(30)}: PM2 log: App [api:0] starting in -fork mode-`,
+    `${local(29)}: PM2 log: App [bridge:1] starting in -fork mode-`,
+    `${local(20)}: PM2 log: Stopping app:bridge id:1`,
+    `${local(20)}: PM2 log: App [bridge:1] exited with code [0] via signal [SIGINT]`,
+    `${local(10)}: PM2 log: App [tele:2] starting in -fork mode-`,
+    ...[9, 8, 7].flatMap(t => [`${local(t)}: PM2 log: App [tele:2] exited with code [1] via signal [SIGINT]`,
+        `${local(t)}: PM2 log: App [tele:2] starting in -fork mode-`]),
+    `${local(6)}: PM2 log: Script /x/tele.js had too many unstable restarts (3). Stopped. "errored"`,
+    '2020-01-01T10:00:00: PM2 log: App [old:3] starting in -fork mode-',
+    ...[1, 2, 3].map(i => `2020-01-01T10:00:0${i}: PM2 log: App [old:3] exited with code [1] via signal [SIGINT]`),
+].join('\n');
+const pm = C.parsePm2Log(pm2log, new Map());
+check('pm2: stop is not a crash', pm.get('bridge:1').state === 'stopped' && pm.get('bridge:1').crashes.length === 0);
+check('pm2: errored + restarts + crash loop', pm.get('tele:2').state === 'errored' && pm.get('tele:2').restarts === 3 && pm.get('tele:2').crashes.length === 3);
+check('pm2: old crashes are not a loop', pm.get('old:3').crashes.length === 0);
+const manual = C.parsePm2Log(`${pm2log}\n${local(5)}: PM2 log: App [tele:2] starting in -fork mode-`, new Map()).get('tele:2');
+check('pm2: manual restart after errored is not counted', manual.restarts === 3 && manual.state === 'online');
+check('pm2: no daemon -> hidden', new C.Pm2Monitor('/nonexistent').scan() === null);
+
+// Docker Engine list (fields from Docker 29, API 1.52)
+const dl = C.parseDockerList(JSON.stringify([
+    {Id: 'a'.repeat(64), Names: ['/api'], Image: 'nginx', State: 'running', Status: 'Up 3 days (unhealthy)'},
+    {Id: 'b'.repeat(64), Names: ['/job'], Image: 'x', State: 'exited', Status: 'Exited (137) 2 hours ago'},
+]));
+check('docker: name, health', dl[0].name === 'api' && dl[0].health === 'unhealthy' && dl[0].state === 'running');
+check('docker: exit code', dl[1].exitCode === 137 && dl[1].health === null);
+check('docker: compact status', C.compactDockerStatus('Up 36 seconds (unhealthy)') === 'Up 36s unhealthy' &&
+    C.compactDockerStatus('Exited (100) 6 months ago') === 'Exited (100) 6mo' &&
+    C.compactDockerStatus('Up About a minute (health: starting)') === 'Up 1m starting');
+check('docker: no socket -> hidden', new C.DockerMonitor(['/nonexistent.sock']).socket === null);
+
 // Live readers on this machine
 const cpu = new C.CpuSampler();
 cpu.sample();
@@ -68,10 +103,21 @@ for (let i = 0; i < 100; i++) {
 check('tick cost', true, `${((GLib.get_monotonic_time() - t0) / 100 / 1000).toFixed(2)} ms/tick`);
 
 const loop = new GLib.MainLoop(null, false);
-let pending = 2;
+let pending = 3;
 const done = () => --pending || loop.quit();
 C.queryAddresses(null, a => { check('ip addr (async)', Array.isArray(a), a?.map(x => `${x.iface}=${x.address}`).join(' ')); done(); });
 new C.GpuSampler().poll(null, g => { check('gpu poll (async)', g !== undefined, JSON.stringify(g)); done(); });
+const dk = new C.DockerMonitor();
+if (dk.socket) {
+    const t1 = GLib.get_monotonic_time();
+    dk.poll(null, l => {
+        check('docker poll (async)', l === null || Array.isArray(l),
+            `${((GLib.get_monotonic_time() - t1) / 1000).toFixed(1)} ms · ${l?.map(x => `${x.name}=${x.state}`).join(' ') ?? 'no access'}`);
+        done();
+    });
+} else {
+    done();
+}
 loop.run();
 
 print(failed ? `\n${failed} FAILED` : '\nall passed');
