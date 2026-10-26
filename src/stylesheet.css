@@ -1,34 +1,42 @@
-.moni-panel { spacing: 7px; }
-.moni-chip { spacing: 3px; }
-.moni-chip-label { font-size: 8pt; font-weight: bold; }
+/* Top bar: light weight, tabular numbers; style = mono swaps every color for grays. */
+.moni-panel { spacing: 9px; }
+.moni-chip { spacing: 4px; }
+.moni-chip-label { font-size: 8pt; font-weight: 600; letter-spacing: 0.3px; }
 .moni-value { font-size: 9pt; font-feature-settings: "tnum"; min-width: 2.4em; text-align: right; }
 .moni-value-net { font-size: 7pt; min-width: 3.6em; }
-.moni-graph { background-color: rgba(128, 128, 128, 0.18); border-radius: 3px; }
+.moni-graph { background-color: rgba(128, 128, 128, 0.12); border-radius: 4px; }
 
-.moni-badge { border-radius: 9px; padding: 1px 7px; }
-.moni-badge .moni-chip-label, .moni-badge .moni-value { font-size: 8.5pt; font-weight: bold; min-width: 0; }
-.moni-badge-ros { background-color: rgba(34, 211, 238, 0.20); color: #67e8f9; }
-.moni-badge-can { background-color: rgba(251, 146, 60, 0.20); color: #fdba74; }
-.moni-badge-pm2 { background-color: rgba(45, 212, 191, 0.20); color: #5eead4; }
-.moni-badge-docker { background-color: rgba(33, 150, 243, 0.22); color: #7cc4fa; }
-.moni-badge-rec { background-color: rgba(248, 84, 84, 0.22); color: #fca5a5; }
-.moni-alert { background-color: rgba(239, 68, 68, 0.85); color: #ffffff; }
+.moni-badge { border-radius: 99px; padding: 1px 8px; }
+.moni-badge .moni-chip-label, .moni-badge .moni-value { font-size: 8.5pt; font-weight: 600; min-width: 0; }
+.moni-badge-ros { background-color: rgba(100, 210, 255, 0.18); color: #64d2ff; }
+.moni-badge-can { background-color: rgba(255, 159, 10, 0.18); color: #ff9f0a; }
+.moni-badge-pm2 { background-color: rgba(102, 212, 207, 0.18); color: #66d4cf; }
+.moni-badge-docker { background-color: rgba(10, 132, 255, 0.20); color: #409cff; }
+.moni-badge-rec { background-color: rgba(255, 69, 58, 0.18); color: #ff6961; }
+.moni-alert { background-color: #ff453a; color: #ffffff; }
 
-.moni-dash { spacing: 14px; min-width: 360px; padding: 4px 2px; }
-.moni-card { spacing: 5px; }
-.moni-card-head { spacing: 8px; width: 360px; }
-.moni-dot { width: 8px; height: 8px; border-radius: 4px; }
-.moni-card-title { font-weight: bold; }
-.moni-host { font-size: 12pt; }
-.moni-card-value { font-feature-settings: "tnum"; font-size: 9.5pt; }
-.moni-detail { font-size: 9.5pt; width: 360px; }
-.moni-mono { font-family: monospace; font-size: 9pt; }
+/* style = mono: neutral pills; alerts invert instead of turning red. */
+.moni-style-mono .moni-badge { background-color: rgba(255, 255, 255, 0.12); color: #f2f2f7; }
+.moni-style-mono .moni-badge .moni-chip-label { color: rgba(242, 242, 247, 0.6); }
+.moni-style-mono .moni-alert { background-color: #f2f2f7; color: #000000; }
+.moni-style-mono .moni-alert .moni-chip-label { color: rgba(0, 0, 0, 0.6); }
+
+/* Menu: grouped tiles like Control Center. */
+.moni-dash { spacing: 8px; min-width: 360px; padding: 2px 0; }
+.moni-card { spacing: 6px; padding: 10px; border-radius: 12px; background-color: rgba(128, 128, 128, 0.10); }
+.moni-card-head { spacing: 7px; width: 340px; }
+.moni-dot { width: 6px; height: 6px; border-radius: 3px; }
+.moni-card-title { font-weight: 600; font-size: 10.5pt; }
+.moni-host { font-size: 11.5pt; }
+.moni-card-value { font-feature-settings: "tnum"; font-size: 9.5pt; color: rgba(128, 128, 128, 1); }
+.moni-detail { font-size: 9pt; width: 340px; }
+.moni-mono { font-family: monospace; font-size: 8.5pt; }
 .moni-ip-iface { font-size: 9.5pt; }
-.moni-accel { font-size: 8.5pt; padding-left: 24px; }
-.moni-select-hint { background-color: rgba(0, 0, 0, 0.75); color: #ffffff; border-radius: 6px; padding: 6px 12px; font-size: 10.5pt; }
-.moni-pin { box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55); border: 1px solid rgba(255, 255, 255, 0.25); }
-.moni-clip-search { min-width: 340px; }
+.moni-accel { font-size: 8.5pt; padding-left: 24px; color: rgba(128, 128, 128, 1); }
+.moni-select-hint { background-color: rgba(30, 30, 30, 0.82); color: #ffffff; border-radius: 10px; padding: 7px 14px; font-size: 10.5pt; }
+.moni-pin { box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45); border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 6px; }
+.moni-clip-search { min-width: 340px; border-radius: 8px; }
 .moni-clip-scroll { max-height: 460px; }
-.moni-clip-header { font-size: 8.5pt; font-weight: bold; }
-.moni-clip-star { padding: 2px 4px; border-radius: 4px; }
-.moni-clip-star:hover { background-color: rgba(128, 128, 128, 0.25); }
+.moni-clip-header { font-size: 8pt; font-weight: 600; color: rgba(128, 128, 128, 1); }
+.moni-clip-star { padding: 2px 4px; border-radius: 6px; }
+.moni-clip-star:hover { background-color: rgba(128, 128, 128, 0.2); }

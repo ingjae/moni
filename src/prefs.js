@@ -147,6 +147,14 @@ export default class MoniPreferences extends ExtensionPreferences {
             dd.selected = Math.max(0, POSITIONS.indexOf(settings.get_string('panel-position')));
         });
         row(general, 'Panel position', '', dd);
+        const STYLES = ['color', 'mono'];
+        const style = Gtk.DropDown.new_from_strings(['Color', 'Monochrome']);
+        style.selected = Math.max(0, STYLES.indexOf(settings.get_string('style')));
+        style.connect('notify::selected', () => settings.set_string('style', STYLES[style.selected]));
+        settings.connect('changed::style', () => {
+            style.selected = Math.max(0, STYLES.indexOf(settings.get_string('style')));
+        });
+        row(general, 'Style', 'Apple system colors, or grays only', style);
 
         const backup = group('Backup', 'Move your Moni setup — toggles, shortcuts and ★ clipboard favorites — to another machine.');
         const choose = (title, action, onFile) => {

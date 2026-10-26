@@ -3,6 +3,7 @@
   <schema id="org.gnome.shell.extensions.moni" path="/org/gnome/shell/extensions/moni/">
     <key name="update-interval" type="i"><default>1500</default><summary>Update interval in ms</summary></key>
     <key name="panel-position" type="s"><default>'right'</default><summary>left, center or right</summary></key>
+    <key name="style" type="s"><default>'color'</default><summary>color (Apple system colors) or mono (grays only)</summary></key>
     <key name="graph-width" type="i"><default>28</default><summary>Panel graph width in px</summary></key>
     <key name="show-text" type="b"><default>true</default><summary>Show numbers next to graphs</summary></key>
     <key name="show-cpu" type="b"><default>true</default><summary>Show CPU</summary></key>

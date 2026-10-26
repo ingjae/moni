@@ -22,22 +22,27 @@ import * as Clip from './clipboard.js';
 
 const HISTORY = 180;
 const PANEL_GRAPH_H = 18;
-const MENU_GRAPH = [340, 44];
+const MENU_GRAPH = [340, 40];
 
+// Apple system colors (dark variants).
 const COLOR = {
-    cpu: [0.35, 0.78, 0.98],
-    ram: [0.65, 0.55, 0.98],
-    gpu: [0.20, 0.83, 0.60],
-    rx: [0.38, 0.65, 0.98],
-    tx: [0.96, 0.45, 0.71],
-    disk: [0.98, 0.75, 0.14],
-    ros: [0.13, 0.83, 0.93],
-    can: [0.98, 0.57, 0.24],
-    pm2: [0.40, 0.85, 0.75],
-    docker: [0.13, 0.59, 0.95],
-    dev: [0.75, 0.85, 0.30],
-    rec: [0.97, 0.33, 0.33],
+    cpu: [0.04, 0.52, 1.00], // blue
+    ram: [0.37, 0.36, 0.90], // indigo
+    gpu: [0.19, 0.82, 0.35], // green
+    rx: [0.04, 0.52, 1.00],
+    tx: [1.00, 0.22, 0.37], // pink
+    disk: [1.00, 0.62, 0.04], // orange
+    ros: [0.39, 0.82, 1.00], // cyan
+    can: [1.00, 0.62, 0.04],
+    pm2: [0.40, 0.90, 0.89], // mint
+    docker: [0.04, 0.52, 1.00],
+    dev: [0.19, 0.82, 0.35],
+    rec: [1.00, 0.27, 0.23], // red
 };
+// style = 'mono': grays only. The top bar is always dark, the menu may not be.
+let monochrome = false;
+const MONO_PANEL = [0.92, 0.92, 0.94];
+const MONO_MENU = [0.55, 0.55, 0.58];
 
 const css = ([r, g, b]) => `rgb(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)})`;
 const pct = v => `${Math.round(v ?? 0)}%`;
@@ -92,8 +97,9 @@ class History {
 // max === null auto-scales to the visible window (used for byte rates).
 const Graph = GObject.registerClass(
 class MoniGraph extends St.DrawingArea {
-    _init(series, width, height, max) {
+    _init(series, width, height, max, panel = false) {
         super._init({style_class: 'moni-graph', y_align: Clutter.ActorAlign.CENTER});
+        this._panel = panel;
         this.set_style(`width: ${width}px; height: ${height}px;`);
         this._series = series;
         this._max = max;
@@ -119,17 +125,17 @@ class MoniGraph extends St.DrawingArea {
                 continue;
             const x0 = w - (vals.length - 1) * step;
             const y = v => h - Math.min(1, v / max) * (h - 1.5) - 0.75;
-            const [r, g, b] = s.color;
+            const [r, g, b] = monochrome ? this._panel ? MONO_PANEL : MONO_MENU : s.color;
             cr.moveTo(x0, y(vals[0]));
             vals.forEach((v, i) => cr.lineTo(x0 + i * step, y(v)));
             cr.setSourceRGBA(r, g, b, 1);
-            cr.setLineWidth(1.25);
+            cr.setLineWidth(1.5);
             if (s.fill) {
                 cr.strokePreserve();
                 cr.lineTo(w, h);
                 cr.lineTo(x0, h);
                 cr.closePath();
-                cr.setSourceRGBA(r, g, b, 0.28);
+                cr.setSourceRGBA(r, g, b, 0.2);
                 cr.fill();
             } else {
                 cr.stroke();
@@ -156,8 +162,10 @@ class MoniCoreBars extends St.DrawingArea {
         const bw = n ? w / n : w;
         this.values.forEach((v, i) => {
             const t = Math.min(1, v / 100);
-            // cool → hot as a core saturates
-            cr.setSourceRGBA(0.35 + 0.62 * t, 0.78 - 0.45 * t, 0.98 - 0.65 * t, 0.9);
+            // blue → red as a core saturates; gray gets denser in mono
+            const [a, b] = monochrome ? [MONO_MENU, MONO_MENU] : [COLOR.cpu, COLOR.rec];
+            cr.setSourceRGBA(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t,
+                monochrome ? 0.45 + 0.45 * t : 0.85);
             const bh = Math.max(1, t * (h - 2));
             cr.rectangle(i * bw + 0.5, h - 1 - bh, Math.max(1, bw - 1), bh);
             cr.fill();
@@ -169,10 +177,11 @@ class MoniCoreBars extends St.DrawingArea {
 function makeCard(title, color) {
     const box = new St.BoxLayout({vertical: true, style_class: 'moni-card', x_expand: true});
     const head = new St.BoxLayout({style_class: 'moni-card-head'});
-    head.add_child(new St.Widget({
+    const dot = new St.Widget({
         style_class: 'moni-dot', style: `background-color: ${css(color)};`,
-        y_align: Clutter.ActorAlign.CENTER,
-    }));
+        y_align: Clutter.ActorAlign.CENTER, visible: !monochrome,
+    });
+    head.add_child(dot);
     const label = new St.Label({text: title, style_class: 'moni-card-title', x_expand: true, y_align: Clutter.ActorAlign.CENTER});
     head.add_child(label);
     const value = new St.Label({
@@ -186,7 +195,7 @@ function makeCard(title, color) {
     detail.clutter_text.line_wrap = true;
     detail.clutter_text.line_wrap_mode = 2; // Pango.WrapMode.WORD_CHAR
     detail.clutter_text.ellipsize = 0;
-    return {box, label, value, detail, add: w => box.add_child(w), finish: () => box.add_child(detail)};
+    return {box, label, value, detail, dot, add: w => box.add_child(w), finish: () => box.add_child(detail)};
 }
 
 const MoniIndicator = GObject.registerClass(
@@ -239,6 +248,7 @@ class MoniIndicator extends PanelMenu.Button {
     _buildPanel() {
         this._panel.destroy_all_children();
         const s = this._settings;
+        this._applyStyle();
         const gw = s.get_int('graph-width');
         const showText = s.get_boolean('show-text');
         this._chips = {};
@@ -248,7 +258,7 @@ class MoniIndicator extends PanelMenu.Button {
             l.opacity = cls ? 255 : 150;
             l.clutter_text.ellipsize = 0; // never "…" the panel; Pango.EllipsizeMode.NONE
             box.add_child(l);
-            const graph = series ? new Graph(series, gw, PANEL_GRAPH_H, max) : null;
+            const graph = series ? new Graph(series, gw, PANEL_GRAPH_H, max, true) : null;
             if (graph)
                 box.add_child(graph);
             const value = new St.Label({style_class: 'moni-value', y_align: Clutter.ActorAlign.CENTER});
@@ -656,7 +666,7 @@ class MoniIndicator extends PanelMenu.Button {
                 const status = `${C.compactDockerStatus(x.status)}${x.restarts ? ` ↺${x.restarts}` : ''}`;
                 return `${(x.name.length > 16 ? `${x.name.slice(0, 15)}…` : x.name).padEnd(16)} ` +
                     `${(on ? `${x.cpu.toFixed(1)}%` : '').padStart(5)} ${(on ? fmtBytes(x.mem) : '').padStart(5)} ` +
-                    `${status}${dockerTrouble(x) ? '  ⚠' : ''}`;
+                    `${status}${dockerTrouble(x) ? ' ⚠' : ''}`;
             });
             if (ctrs.length > 12)
                 rows.push(`… ${ctrs.length - 12} more`);
@@ -898,6 +908,14 @@ class MoniIndicator extends PanelMenu.Button {
         this._updatePanel();
         if (this.menu.isOpen)
             this._refreshMenu();
+    }
+
+    _applyStyle() {
+        monochrome = this._settings.get_string('style') === 'mono';
+        for (const actor of [this._panel, this.menu.box])
+            actor[monochrome ? 'add_style_class_name' : 'remove_style_class_name']('moni-style-mono');
+        for (const c of Object.values(this._cards ?? {}))
+            c.dot.visible = !monochrome;
     }
 
     _onSetting(key) {

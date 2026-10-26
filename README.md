@@ -4,8 +4,8 @@
 
 **The top-bar system monitor for people who ship robots.**
 
-CPU · RAM · GPU · network · disk · IP, plus ROS 2 processes, rosbag disk ETA, CAN bus, PM2 apps, Docker containers, sensor hotplug
-Shottr-style screenshots & screen recording and a clipboard history. All of it lives in the GNOME panel.
+CPU · RAM · GPU · network · disk · IP, plus ROS 2 processes, rosbag disk ETA, CAN bus, PM2 apps, Docker containers and sensor hotplug.
+Shottr-style screenshots, screen recording and a clipboard history. All of it lives in the GNOME panel.
 
 [![GNOME Shell](https://img.shields.io/badge/GNOME_Shell-42_→_48-4A86CF?logo=gnome&logoColor=white)](#compatibility)
 [![Ubuntu](https://img.shields.io/badge/Ubuntu-22.04_|_24.04-E95420?logo=ubuntu&logoColor=white)](#compatibility)
@@ -13,7 +13,9 @@ Shottr-style screenshots & screen recording and a clipboard history. All of it l
 [![Runtime deps](https://img.shields.io/badge/extra_runtime_deps-0-success)](#how-it-works)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-<img src="docs/panel.png" alt="Moni in the GNOME top bar: BAG badge with time until disk full, ROS process count, CAN frame rate, CPU/RAM/GPU/NET sparklines and disk usage" width="100%">
+<img src="docs/panel.png" alt="Moni in the GNOME top bar, Color style: BAG badge with time until disk full, ROS process count, PM2 online/total, Docker running containers, CPU/RAM/GPU/NET sparklines and disk usage" width="100%">
+<img src="docs/panel-mono.png" alt="The same top bar in the Monochrome style: gray badges and gray sparklines" width="100%">
+<sub>Settings → General → Style: <b>Color</b> (Apple system colors, top) or <b>Monochrome</b> (grays only, bottom).</sub>
 
 [GitHub](https://github.com/ingjae/moni) · [Highlights](#-highlights) · [Features](#features) · [Install](#install) · [How it works](#how-it-works) · [Configuration](#configuration)
 
@@ -82,14 +84,14 @@ in the panel until you press the shortcut again.
 
 ### 🧭 Never covers the clock
 On a crowded panel, Moni measures the free space up to the clock and hides the least important chips
-first. Alerts like recording, rosbag, ROS and CAN are the last to go. Anything hidden is still in the
-dropdown.
+first. Alerts like recording, rosbag, ROS, CAN, PM2 and Docker are the last to go. Anything hidden is
+still in the dropdown.
 
 </td>
 <td valign="top">
 
 ### 🪶 Light enough to forget about
-One GJS extension that reads `/proc` and `/sys`: no Python, no daemon, no `ros2` CLI polling. A
+One GJS extension that reads `/proc` and `/sys`: no Python, no daemon, no `ros2` / `pm2` / `docker` CLI polling. A
 sampling tick takes **0.35 ms**, about 0.1 % of one core in total. A sleeping laptop dGPU shows `zZ`
 and is **not woken up** just to be measured.
 
@@ -113,14 +115,31 @@ on the robot PC and you're done. Unknown or mistyped values are skipped, never c
 
 </td>
 </tr>
+<tr>
+<td valign="top">
+
+### 🐳 PM2 and Docker, crash-aware
+`PM2 3/4` and `DOCKER 6` count what is up. A crash loop, an errored app, a restarting or unhealthy
+container turns the badge red and sends a notification. Read from `~/.pm2`, `/proc`, the Docker socket
+and cgroups, so neither CLI is ever spawned.
+
+</td>
+<td valign="top">
+
+### 🎨 Color or monochrome
+Rounded, quiet, Control Center-style tiles. **Color** uses Apple's system palette; **Monochrome** turns
+every graph, badge and dot gray, and alerts invert to white instead of red. Switch live in Settings.
+
+</td>
+</tr>
 </table>
 
 <p align="center">
-  <img src="docs/dashboard.png" alt="Moni dropdown: Screenshot and Record actions on top, then memory, NVIDIA GPU, network with copyable IPs, storage, ROS 2 process table, rosbag recording ETA and CAN bus" width="380">
+  <img src="docs/dashboard.png" alt="Moni dropdown, scrolled: Screenshot and Record actions on top, then network with copyable IPs, storage, ROS 2 process table, rosbag recording ETA, PM2 apps and Docker containers" width="380">
   &nbsp;&nbsp;
   <img src="docs/editor.png" alt="Moni Shot editor with an arrow, a rectangle, numbered steps and a 560 px ruler" width="560">
 </p>
-<p align="center"><sub>Real captures on Ubuntu 24.04 / GNOME 46. Left: the dropdown (it scrolls; capture actions stay on top). Right: the Moni Shot editor. Hostname, IPs and paths are blurred.</sub></p>
+<p align="center"><sub>Real captures on Ubuntu 24.04 / GNOME 46. Left: the dropdown, scrolled to the robotics tiles (capture actions stay on top). Right: the Moni Shot editor. IPs, paths and internal container names are blurred.</sub></p>
 
 ## Features
 
@@ -225,6 +244,7 @@ flowchart LR
     C --> UI["extension.js<br/>sparklines · dashboard · auto-fit"]
     X --> UI
     N["nvidia-smi<br/>(only while dGPU is awake)"] -.-> C
+    Q["~/.pm2 files<br/>Docker socket + cgroups"] --> C
     UI --> K["capture.js<br/>area select · Shell.Screenshot · pins"]
     K --> E["editor.js<br/>GTK 4 Moni Shot"]
     E -- "COPY / PIN / SAVED (stdout)" --> K
@@ -249,6 +269,8 @@ where an extension runs.
 | Core tick (CPU, mem, net, disk I/O, CAN, temp) | **0.35 ms** | every 1.5 s |
 | ROS radar scan (warm, ~500 processes) | **2.5 ms** | every 3 s |
 | ROS radar first scan (cold) | 33 ms | once |
+| PM2 scan (`~/.pm2` + `/proc`) | ~1 ms | every 3 s |
+| Docker poll (socket + cgroups) | ~11–15 ms, async | every 3 s |
 | `ip`, latency probe | async subprocess / socket | every 10 s |
 
 The dropdown is only computed while it is open.
@@ -267,6 +289,7 @@ gsettings --schemadir ~/.local/share/gnome-shell/extensions/moni@ingjae.github.i
 |---|---|---|
 | `update-interval` | `1500` | ms between samples |
 | `panel-position` | `right` | `left` / `center` / `right` |
+| `style` | `color` | `color` (Apple system colors) / `mono` (grays only; alerts invert instead of turning red) |
 | `graph-width` | `28` | px per panel sparkline |
 | `show-text` | `true` | numbers next to graphs |
 | `show-cpu` `show-ram` `show-gpu` `show-net` `show-disk` `show-ip` | `true` | panel chips |
@@ -331,7 +354,7 @@ tests/            collector smoke tests, settings backup round trip, UI regressi
 ```
 
 ```bash
-make test      # collector tests (ESM) + legacy build load/syntax check
+make test      # collector, settings-backup and UI-regression tests + legacy build load/syntax check
 make test-ui   # GTK editor rendering regression tests (requires a graphical session)
 make nested    # throwaway GNOME Shell in a window with Moni loaded
 make logs      # follow gnome-shell logs filtered for moni
