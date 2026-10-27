@@ -249,10 +249,39 @@ gnome-extensions install --force moni@ingjae.github.io.gnome45-48.v0.0.9.zip   #
 gnome-extensions install --force moni@ingjae.github.io.gnome42-44.v0.0.9.zip   # Ubuntu 22.04
 ```
 
-**Updates.** Once a day Moni asks GitHub for the latest release. A notification offers **Update**, which
-downloads the zip for your GNOME version, checks it against the SHA-256 digest GitHub publishes and
-installs it. **X11:** *Restart now* reloads the shell with your windows still open. **Wayland:** log out
-and back in. Settings → Updates turns the check off, installs releases without asking, or checks right now with *Check now*.
+### Updating
+
+**Which version do I have?** Settings → About → *Version*, or:
+
+```bash
+gnome-extensions info moni@ingjae.github.io | grep Version
+```
+
+**Automatic (v0.0.7 and later).** Once a day Moni asks GitHub for the latest release. A notification
+offers **Update**, and the dropdown shows *Update to Moni x.y.z* until it is applied. Moni downloads the
+zip for your GNOME version, checks it against the SHA-256 digest GitHub publishes and installs it.
+Settings → Updates turns the daily check off or installs releases without asking.
+
+**Check right now (v0.0.9 and later).** Settings → Updates → **Check now**. If a release is waiting, the
+button turns into **Update**.
+
+**Manually** (v0.0.6 or older, or with update checks off), from a clone:
+
+```bash
+cd moni && git pull && make install
+```
+
+or with a zip from [Releases](https://github.com/ingjae/moni/releases). Compare its SHA-256 with the
+digest shown next to the file on the release page first:
+
+```bash
+sha256sum moni@ingjae.github.io.gnome45-48.v0.0.9.zip
+gnome-extensions install --force moni@ingjae.github.io.gnome45-48.v0.0.9.zip
+```
+
+Every update takes effect after a shell restart: **X11:** <kbd>Alt</kbd>+<kbd>F2</kbd> → `r` (the
+*Restart now* button in the notification does the same, and windows stay open) · **Wayland:** log out
+and back in.
 
 Build requirements: `python3` and `glib-compile-schemas`. Runtime: only what Ubuntu ships with GNOME
 (`gjs`, GTK 4, libadwaita). `nvidia-smi` is used if present. The optional OCR / QR feature adds
