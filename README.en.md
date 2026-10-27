@@ -247,8 +247,8 @@ gnome-extensions enable moni@ingjae.github.io
 Prefer a zip? Grab one from [Releases](https://github.com/ingjae/moni/releases):
 
 ```bash
-gnome-extensions install --force moni@ingjae.github.io.gnome45-48.v0.0.9.zip   # Ubuntu 24.04
-gnome-extensions install --force moni@ingjae.github.io.gnome42-44.v0.0.9.zip   # Ubuntu 22.04
+gnome-extensions install --force moni@ingjae.github.io.gnome45-48.v0.0.10.zip   # Ubuntu 24.04
+gnome-extensions install --force moni@ingjae.github.io.gnome42-44.v0.0.10.zip   # Ubuntu 22.04
 ```
 
 ### Updating
@@ -277,8 +277,8 @@ or with a zip from [Releases](https://github.com/ingjae/moni/releases). Compare 
 digest shown next to the file on the release page first:
 
 ```bash
-sha256sum moni@ingjae.github.io.gnome45-48.v0.0.9.zip
-gnome-extensions install --force moni@ingjae.github.io.gnome45-48.v0.0.9.zip
+sha256sum moni@ingjae.github.io.gnome45-48.v0.0.10.zip
+gnome-extensions install --force moni@ingjae.github.io.gnome45-48.v0.0.10.zip
 ```
 
 Every update takes effect after a shell restart: **X11:** <kbd>Alt</kbd>+<kbd>F2</kbd> → `r` (the
@@ -408,7 +408,7 @@ form, so the two builds can't drift apart.
   lazy-load or scroll horizontally may stitch short; it stops after 40 frames.
 - OCR quality is tesseract's: clean UI text reads well, small or stylised text less so.
 - An update replaces the files on disk; the running shell keeps the old code until it restarts.
-  The X11 restart and the GNOME 42 (libsoup 2.4) download path haven't been run yet.
+  The GNOME 42 (libsoup 2.4) download path hasn't been run yet.
 - Clipboard history is **text only** for now; images copied from Moni Shot or other apps aren't listed.
 
 ## Development

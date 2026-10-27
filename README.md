@@ -243,8 +243,8 @@ gnome-extensions enable moni@ingjae.github.io
 zip이 편하다면 [Releases](https://github.com/ingjae/moni/releases)에서 받으세요:
 
 ```bash
-gnome-extensions install --force moni@ingjae.github.io.gnome45-48.v0.0.9.zip   # Ubuntu 24.04
-gnome-extensions install --force moni@ingjae.github.io.gnome42-44.v0.0.9.zip   # Ubuntu 22.04
+gnome-extensions install --force moni@ingjae.github.io.gnome45-48.v0.0.10.zip   # Ubuntu 24.04
+gnome-extensions install --force moni@ingjae.github.io.gnome42-44.v0.0.10.zip   # Ubuntu 22.04
 ```
 
 ### 업데이트
@@ -273,8 +273,8 @@ cd moni && git pull && make install
 파일 옆에 표시된 SHA-256 해시와 비교하세요:
 
 ```bash
-sha256sum moni@ingjae.github.io.gnome45-48.v0.0.9.zip
-gnome-extensions install --force moni@ingjae.github.io.gnome45-48.v0.0.9.zip
+sha256sum moni@ingjae.github.io.gnome45-48.v0.0.10.zip
+gnome-extensions install --force moni@ingjae.github.io.gnome45-48.v0.0.10.zip
 ```
 
 어떤 방법이든 셸을 재시작해야 적용됩니다. **X11:** <kbd>Alt</kbd>+<kbd>F2</kbd> → `r`(알림의
@@ -401,7 +401,7 @@ ROS 2 감지는 배포판과 무관하며 Jazzy에서 테스트했습니다.
   있는 페이지는 짧게 이어 붙을 수 있고, 40장에서 멈춥니다.
 - OCR 품질은 tesseract 수준입니다. 깔끔한 UI 글자는 잘 읽지만 작거나 꾸민 글자는 덜 정확합니다.
 - 업데이트는 디스크의 파일을 바꿉니다. 실행 중인 셸은 재시작 전까지 예전 코드를 씁니다.
-  X11 재시작과 GNOME 42(libsoup 2.4) 다운로드 경로는 아직 실행해 보지 않았습니다.
+  GNOME 42(libsoup 2.4) 다운로드 경로는 아직 실행해 보지 않았습니다.
 - 클립보드 기록은 지금은 **텍스트만** 지원합니다. Moni Shot이나 다른 앱에서 복사한 이미지는 목록에 없습니다.
 
 ## 개발

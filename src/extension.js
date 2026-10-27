@@ -318,7 +318,12 @@ class MoniIndicator extends PanelMenu.Button {
             c.box.visible = visible;
             if (!visible)
                 return;
-            c.value.text = text;
+            if (c.value.text !== text) {
+                c.value.text = text;
+                // Repaint the whole chip: on some setups redrawing only the new
+                // glyphs left digits of the old value on screen (#3).
+                c.box.queue_redraw();
+            }
             c.graph?.queue_repaint();
         };
         set('cpu', pct(st.cpu?.total));
