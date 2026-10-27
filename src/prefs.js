@@ -168,6 +168,7 @@ export default class MoniPreferences extends ExtensionPreferences {
         settings.bind('update-auto', auto, 'active', Gio.SettingsBindFlags.DEFAULT);
         settings.bind('update-check', auto, 'sensitive', Gio.SettingsBindFlags.GET);
         row(updates, 'Install automatically', 'Applies after a Shell restart or the next login', auto);
+        this._checkRow(window, updates, row);
 
         const backup = group('Backup', 'Move your Moni setup — toggles, shortcuts and ★ clipboard favorites — to another machine.');
         const choose = (title, action, onFile) => {
@@ -216,6 +217,52 @@ export default class MoniPreferences extends ExtensionPreferences {
         row(about, 'Version', '', new Gtk.Label({label: this.metadata['version-name'], selectable: true}));
         link('GitHub', 'Source code, releases and docs', 'github.com/ingjae/moni', REPO);
         link('Report an issue', 'Bugs, questions, feature requests', 'Open issue', `${REPO}/issues/new`);
+    }
+
+    // Check now, then Update when a release is waiting. Runs helper.js, the
+    // same download and SHA-256 check the Shell uses.
+    _checkRow(window, g, row) {
+        const version = this.metadata['version-name'];
+        const button = new Gtk.Button({label: 'Check now'});
+        const r = row(g, 'Check for updates now', `Installed: ${version}`, button);
+        const helper = args => new Promise((resolve, reject) => {
+            const proc = Gio.Subprocess.new(['gjs', '-m', `${this.path}/helper.js`, ...args],
+                Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
+            proc.communicate_utf8_async(null, null, (p, res) => {
+                try {
+                    const [, out, err] = p.communicate_utf8_finish(res);
+                    if (!p.get_successful())
+                        throw new Error(err.trim().split('\n').pop() || `helper ${args[0]} failed`);
+                    resolve(out.trim());
+                } catch (e) {
+                    reject(e);
+                }
+            });
+        });
+        let found = null;
+        button.connect('clicked', async () => {
+            button.sensitive = false;
+            try {
+                if (!found) {
+                    r.subtitle = 'Checking…';
+                    const out = await helper(['latest', version, String(this.metadata['shell-version'][0])]);
+                    found = out ? JSON.parse(out) : null;
+                    r.subtitle = found ? `Moni ${found.version} is available · installed: ${version}` : `Up to date (${version})`;
+                    button.label = found ? 'Update' : 'Check now';
+                } else {
+                    r.subtitle = `Installing ${found.version}…`;
+                    await helper(['install', found.url, found.sha256]);
+                    r.subtitle = GLib.getenv('XDG_SESSION_TYPE') === 'wayland'
+                        ? `Moni ${found.version} installed · log out and back in to apply`
+                        : `Moni ${found.version} installed · restart GNOME Shell (Alt+F2, r) to apply`;
+                    button.visible = false;
+                }
+            } catch (e) {
+                r.subtitle = GLib.markup_escape_text(`Failed: ${e.message}`, -1);
+            } finally {
+                button.sensitive = true;
+            }
+        });
     }
 
     // OCR needs tesseract and zbar. Turning the switch on installs them

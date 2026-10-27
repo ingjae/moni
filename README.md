@@ -245,14 +245,14 @@ gnome-extensions enable moni@ingjae.github.io
 Prefer a zip? Grab one from [Releases](https://github.com/ingjae/moni/releases):
 
 ```bash
-gnome-extensions install --force moni@ingjae.github.io.gnome45-48.v0.0.8.zip   # Ubuntu 24.04
-gnome-extensions install --force moni@ingjae.github.io.gnome42-44.v0.0.8.zip   # Ubuntu 22.04
+gnome-extensions install --force moni@ingjae.github.io.gnome45-48.v0.0.9.zip   # Ubuntu 24.04
+gnome-extensions install --force moni@ingjae.github.io.gnome42-44.v0.0.9.zip   # Ubuntu 22.04
 ```
 
 **Updates.** Once a day Moni asks GitHub for the latest release. A notification offers **Update**, which
 downloads the zip for your GNOME version, checks it against the SHA-256 digest GitHub publishes and
 installs it. **X11:** *Restart now* reloads the shell with your windows still open. **Wayland:** log out
-and back in. Settings → Updates turns the check off or installs releases without asking.
+and back in. Settings → Updates turns the check off, installs releases without asking, or checks right now with *Check now*.
 
 Build requirements: `python3` and `glib-compile-schemas`. Runtime: only what Ubuntu ships with GNOME
 (`gjs`, GTK 4, libadwaita). `nvidia-smi` is used if present. The optional OCR / QR feature adds
