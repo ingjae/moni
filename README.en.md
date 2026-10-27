@@ -235,8 +235,9 @@ Turn off *Paste on pick* in Settings if you'd rather have the item copied back w
 
 One-click buttons in the top bar for texts you copy all the time — a GitHub token, a robot's IP, a long
 command. Settings → Quick copy → *Add item*: give it an icon (a short label like `GH`, or an emoji from
-the picker) and the text. A click copies it and the button flashes ✓; the text itself is never shown in
-the panel. Quick copies stay out of the clipboard history. Texts are stored in plain text in dconf and
+the picker) and the text. A click flashes ✓ and, depending on *On click*, **copies and pastes** it where
+the cursor is (default), only copies it, or only pastes it (your clipboard is put back afterwards). The
+text itself is never shown in the panel. Quick copies stay out of the clipboard history. Texts are stored in plain text in dconf and
 are included in *Export*, like ★ favorites.
 
 ## Install
@@ -376,6 +377,7 @@ gsettings --schemadir ~/.local/share/gnome-shell/extensions/moni@ingjae.github.i
 | `ocr` | `false` | OCR and QR codes (turning it on in Settings installs tesseract and zbar) |
 | `update-check` / `update-auto` | `true` / `false` | daily release check / install without asking |
 | `show-quick` / `quick-items` | `true` / `[]` | quick copy buttons / items as JSON (`[{"icon": "GH", "text": "…"}]`) |
+| `quick-action` | `both` | on click: `both` (copy and paste) / `copy` / `paste` |
 | `show-clipboard` / `clipboard-shortcut` | `true` / `<Super><Shift>v` | clipboard history icon + shortcut |
 | `clipboard-paste` | `true` | paste into the focused window on pick |
 | `clipboard-size` | `50` | recent items kept (memory only) |

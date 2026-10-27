@@ -231,7 +231,7 @@ GNOME 기본 <kbd>Print</kbd> 도구는 건드리지 않습니다.
 
 GitHub 토큰, 로봇 IP, 긴 명령어처럼 자주 복사하는 텍스트를 상단바 버튼 한 번으로 복사합니다.
 설정 → Quick copy → *Add item*에서 아이콘(`GH` 같은 짧은 글자 또는 이모지 선택)과 복사할 텍스트를 정하세요.
-누르면 복사되고 버튼이 잠깐 ✓로 바뀝니다. 텍스트 자체는 패널에 보이지 않고, 클립보드 기록에도 남지 않습니다.
+누르면 버튼이 잠깐 ✓로 바뀌고, *On click* 설정에 따라 **복사 후 커서 위치에 붙여넣기**(기본), 복사만, 붙여넣기만(이후 원래 클립보드로 되돌림) 중 하나를 수행합니다. 텍스트 자체는 패널에 보이지 않고, 클립보드 기록에도 남지 않습니다.
 텍스트는 ★ 즐겨찾기처럼 dconf에 평문으로 저장되며 *Export*에도 포함됩니다.
 
 ## 설치
@@ -368,6 +368,7 @@ gsettings --schemadir ~/.local/share/gnome-shell/extensions/moni@ingjae.github.i
 | `ocr` | `false` | OCR과 QR 코드(설정에서 켜면 tesseract와 zbar 설치) |
 | `update-check` / `update-auto` | `true` / `false` | 하루 1회 릴리즈 확인 / 묻지 않고 설치 |
 | `show-quick` / `quick-items` | `true` / `[]` | 빠른 복사 버튼 / 항목 JSON (`[{"icon": "GH", "text": "…"}]`) |
+| `quick-action` | `both` | 클릭 동작: `both`(복사+붙여넣기) / `copy` / `paste` |
 | `show-clipboard` / `clipboard-shortcut` | `true` / `<Super><Shift>v` | 클립보드 기록 아이콘 + 단축키 |
 | `clipboard-paste` | `true` | 고르면 포커스된 창에 붙여넣기 |
 | `clipboard-size` | `50` | 보관할 최근 항목 수(메모리에만) |
