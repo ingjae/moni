@@ -32,7 +32,7 @@
     <key name="clipboard-favorites" type="as"><default>[]</default><summary>Starred clipboard items</summary></key>
     <key name="show-quick" type="b"><default>true</default><summary>Quick copy buttons in the top bar</summary></key>
     <key name="quick-action" type="s"><default>'both'</default><summary>On click: copy, paste (at the cursor) or both</summary></key>
-    <key name="quick-items" type="s"><default>'[]'</default><summary>Quick copy items as JSON: [{"icon": "GH", "text": "…"}]</summary></key>
+    <key name="quick-items" type="s"><default>'[]'</default><summary>Quick copy items as JSON: [{"icon": "GH", "image": "/path.png", "text": "…"}]</summary></key>
     <key name="ocr" type="b"><default>false</default><summary>Text recognition (OCR) and QR codes in screenshots</summary></key>
     <key name="update-check" type="b"><default>true</default><summary>Check GitHub once a day for a new release</summary></key>
     <key name="update-auto" type="b"><default>false</default><summary>Install new releases without asking</summary></key>

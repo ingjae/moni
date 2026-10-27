@@ -1,7 +1,8 @@
 // quick.js — one-click copy buttons in the top bar.
 //
-// Each item in the `quick-items` setting (a JSON list of {icon, text}) is a
-// small panel button showing its icon — a short label or an emoji. A click
+// Each item in the `quick-items` setting (a JSON list of {icon, image, text})
+// is a small panel button showing its image, or else its icon — a short
+// label or an emoji. A click
 // copies the text, pastes it at the cursor, or both (`quick-action`); the
 // text itself is never shown.
 
@@ -9,6 +10,7 @@ import GObject from 'gi://GObject';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
 import Clutter from 'gi://Clutter';
+import Gio from 'gi://Gio';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
@@ -20,7 +22,7 @@ export function readItems(settings) {
     try {
         const items = JSON.parse(settings.get_string('quick-items'));
         return Array.isArray(items)
-            ? items.filter(i => typeof i?.icon === 'string' && i.icon.trim() && typeof i.text === 'string' && i.text)
+            ? items.filter(i => (i?.icon?.trim?.() || typeof i?.image === 'string' && i.image) && typeof i.text === 'string' && i.text)
             : [];
     } catch (e) {
         return [];
@@ -48,17 +50,24 @@ class MoniQuickIndicator extends PanelMenu.Button {
     _rebuild() {
         this._box.destroy_all_children();
         for (const item of readItems(this._settings)) {
-            const label = new St.Label({text: item.icon.trim(), y_align: Clutter.ActorAlign.CENTER});
+            const image = item.image && GLib.file_test(item.image, GLib.FileTest.EXISTS);
+            const face = image
+                ? new St.Icon({gicon: new Gio.FileIcon({file: Gio.File.new_for_path(item.image)}), style_class: 'system-status-icon'})
+                : new St.Label({text: item.icon?.trim() || '?', y_align: Clutter.ActorAlign.CENTER});
+            const check = new St.Label({text: '✓', y_align: Clutter.ActorAlign.CENTER, visible: false});
+            const content = new St.BoxLayout();
+            content.add_child(face);
+            content.add_child(check);
             // No key focus on click: the paste must reach the window that has it.
-            const button = new St.Button({style_class: 'panel-button moni-quick-button', child: label, can_focus: false, track_hover: true});
-            button.connect('clicked', () => this._use(item.text, button, label));
+            const button = new St.Button({style_class: 'panel-button moni-quick-button', child: content, can_focus: false, track_hover: true});
+            button.connect('clicked', () => this._use(item.text, button, face, check));
             this._box.add_child(button);
         }
     }
 
     // copy: clipboard only · paste: type it at the cursor and put the old
     // clipboard text back · both: paste and keep it on the clipboard.
-    _use(text, button, label) {
+    _use(text, button, face, check) {
         const clipboard = St.Clipboard.get_default();
         const action = this._settings.get_string('quick-action');
         const put = t => {
@@ -81,7 +90,7 @@ class MoniQuickIndicator extends PanelMenu.Button {
                 });
             });
         }
-        this._flash(button, label);
+        this._flash(button, face, check);
     }
 
     _later(ms, fn) {
@@ -93,16 +102,14 @@ class MoniQuickIndicator extends PanelMenu.Button {
     }
 
     // The button shows ✓ for a moment.
-    _flash(button, label) {
-        const icon = label.text;
-        label.text = '✓';
+    _flash(button, face, check) {
+        face.visible = false;
+        check.visible = true;
         button.add_style_class_name('moni-quick-done');
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 700, () => {
-            if (!this._destroyed) {
-                label.text = icon;
-                button.remove_style_class_name('moni-quick-done');
-            }
-            return GLib.SOURCE_REMOVE;
+        this._later(700, () => {
+            face.visible = true;
+            check.visible = false;
+            button.remove_style_class_name('moni-quick-done');
         });
     }
 

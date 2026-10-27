@@ -9,6 +9,10 @@ const POSITIONS = ['left', 'center', 'right'];
 const FORMAT = 'moni-settings';
 const REPO = 'https://github.com/ingjae/moni';
 const OCR_PACKAGES = ['tesseract-ocr', 'tesseract-ocr-eng', 'tesseract-ocr-kor', 'zbar-tools'];
+// Images picked for quick copy buttons are copied here, so moving or
+// deleting the original does not break the button.
+const QUICK_ICONS = GLib.build_filenamev([GLib.get_user_data_dir(), 'moni', 'quick-icons']);
+const dropQuickIcon = path => path?.startsWith(`${QUICK_ICONS}/`) && GLib.unlink(path);
 const ocrInstalled = () => ['tesseract', 'zbarimg'].every(p => GLib.find_program_in_path(p));
 
 // Every schema key as plain JSON, so the file is readable and diffable.
@@ -298,15 +302,22 @@ export default class MoniPreferences extends ExtensionPreferences {
             rows.forEach(r => g.remove(r));
             rows = load().map((item, i) => {
                 const r = new Adw.ActionRow({
-                    title: GLib.markup_escape_text(String(item.icon ?? ''), -1),
+                    title: GLib.markup_escape_text(String(item.icon || (item.image ? 'Image' : '')), -1),
                     subtitle: `•••• ${String(item.text ?? '').length} characters`,
                 });
+                if (item.image)
+                    r.add_prefix(new Gtk.Image({file: item.image, pixel_size: 24}));
                 r.add_suffix(iconButton('document-edit-symbolic', 'Edit', () => this._quickDialog(window, item, edited => {
                     const items = load();
+                    if (items[i]?.image !== edited.image)
+                        dropQuickIcon(items[i]?.image);
                     items[i] = edited;
                     store(items);
                 })));
-                r.add_suffix(iconButton('user-trash-symbolic', 'Delete', () => store(load().filter((_x, k) => k !== i))));
+                r.add_suffix(iconButton('user-trash-symbolic', 'Delete', () => {
+                    dropQuickIcon(item.image);
+                    store(load().filter((_x, k) => k !== i));
+                }));
                 g.add(r);
                 return r;
             });
@@ -343,6 +354,44 @@ export default class MoniPreferences extends ExtensionPreferences {
         iconRow.append(new Gtk.Label({label: 'Short text (e.g. GH, IP) or an emoji', css_classes: ['dim-label']}));
         box.append(iconRow);
 
+        // An image replaces the text icon in the top bar.
+        let image = item?.image ?? '';
+        const imageRow = new Gtk.Box({spacing: 6});
+        const preview = new Gtk.Image({pixel_size: 24});
+        const pick = new Gtk.Button({label: 'Choose image…'});
+        const clear = new Gtk.Button({icon_name: 'edit-clear-symbolic', tooltip_text: 'Remove image'});
+        const showImage = () => {
+            preview.set_from_file(image || null);
+            preview.visible = clear.visible = !!image;
+        };
+        pick.connect('clicked', () => {
+            const fc = new Gtk.FileChooserNative({title: 'Choose an image', transient_for: dlg, modal: true});
+            const filter = new Gtk.FileFilter({name: 'Images'});
+            filter.add_pixbuf_formats();
+            fc.add_filter(filter);
+            fc.connect('response', (_f, response) => {
+                if (response === Gtk.ResponseType.ACCEPT) {
+                    image = fc.get_file().get_path();
+                    showImage();
+                    sync();
+                }
+                dlg._chooser = null;
+            });
+            dlg._chooser = fc; // keep it alive until it answers
+            fc.show();
+        });
+        clear.connect('clicked', () => {
+            image = '';
+            showImage();
+            sync();
+        });
+        imageRow.append(preview);
+        imageRow.append(pick);
+        imageRow.append(clear);
+        imageRow.append(new Gtk.Label({label: 'Or your own image (PNG, SVG, JPG)', css_classes: ['dim-label']}));
+        box.append(imageRow);
+        showImage();
+
         box.append(heading('Text to copy'));
         const view = new Gtk.TextView({wrap_mode: Gtk.WrapMode.CHAR, monospace: true,
             top_margin: 6, bottom_margin: 6, left_margin: 6, right_margin: 6});
@@ -352,7 +401,7 @@ export default class MoniPreferences extends ExtensionPreferences {
         dlg.set_child(box);
 
         const text = () => view.buffer.text;
-        const sync = () => (save.sensitive = !!icon.text.trim() && !!text());
+        const sync = () => (save.sensitive = (!!icon.text.trim() || !!image) && !!text());
         icon.connect('changed', sync);
         view.buffer.connect('changed', sync);
         sync();
@@ -363,7 +412,19 @@ export default class MoniPreferences extends ExtensionPreferences {
         });
         cancel.connect('clicked', () => dlg.close());
         save.connect('clicked', () => {
-            onSave({icon: icon.text.trim(), text: text()});
+            let stored = image;
+            if (image && image !== item?.image) {
+                try {
+                    GLib.mkdir_with_parents(QUICK_ICONS, 0o700);
+                    const ext = image.match(/\.\w+$/)?.[0] ?? '';
+                    stored = GLib.build_filenamev([QUICK_ICONS, `${GLib.uuid_string_random()}${ext}`]);
+                    Gio.File.new_for_path(image).copy(Gio.File.new_for_path(stored), Gio.FileCopyFlags.NONE, null, null);
+                } catch (e) {
+                    window.add_toast(new Adw.Toast({title: `Image not saved: ${e.message}`}));
+                    return;
+                }
+            }
+            onSave({icon: icon.text.trim(), image: stored || undefined, text: text()});
             dlg.close();
         });
         dlg.present();
