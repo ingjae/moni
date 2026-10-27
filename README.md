@@ -5,7 +5,7 @@
 **The top-bar system monitor for people who ship robots.**
 
 CPU · RAM · GPU · network · disk · IP, plus ROS 2 processes, rosbag disk ETA, CAN bus, PM2 apps, Docker containers and sensor hotplug.
-Shottr-style screenshots, screen recording and a clipboard history. All of it lives in the GNOME panel.
+Shottr-style screenshots with scrolling capture and OCR, screen recording and a clipboard history. All of it lives in the GNOME panel.
 
 [![GNOME Shell](https://img.shields.io/badge/GNOME_Shell-42_→_48-4A86CF?logo=gnome&logoColor=white)](#compatibility)
 [![Ubuntu](https://img.shields.io/badge/Ubuntu-22.04_|_24.04-E95420?logo=ubuntu&logoColor=white)](#compatibility)
@@ -245,12 +245,13 @@ gnome-extensions enable moni@ingjae.github.io
 Prefer a zip? Grab one from [Releases](https://github.com/ingjae/moni/releases):
 
 ```bash
-gnome-extensions install --force moni@ingjae.github.io.gnome45-48.v0.0.5.zip   # Ubuntu 24.04
-gnome-extensions install --force moni@ingjae.github.io.gnome42-44.v0.0.5.zip   # Ubuntu 22.04
+gnome-extensions install --force moni@ingjae.github.io.gnome45-48.v0.0.6.zip   # Ubuntu 24.04
+gnome-extensions install --force moni@ingjae.github.io.gnome42-44.v0.0.6.zip   # Ubuntu 22.04
 ```
 
 Build requirements: `python3` and `glib-compile-schemas`. Runtime: only what Ubuntu ships with GNOME
-(`gjs`, GTK 4, libadwaita). `nvidia-smi` is used if present.
+(`gjs`, GTK 4, libadwaita). `nvidia-smi` is used if present. The optional OCR / QR feature adds
+`tesseract-ocr` and `zbar-tools`, installed from Settings when you turn it on.
 
 ## How it works
 
@@ -364,6 +365,9 @@ form, so the two builds can't drift apart.
 - Docker needs read access to `/run/docker.sock` (the `docker` group) or a rootless socket in `$XDG_RUNTIME_DIR`.
   Restart counts start when Moni starts. Podman isn't supported.
 - The ruler measures what you drag. It doesn't snap to edges the way Shottr does.
+- Scrolling capture scrolls with mouse-wheel steps and matches rows exactly. Pages that animate,
+  lazy-load or scroll horizontally may stitch short; it stops after 40 frames.
+- OCR quality is tesseract's: clean UI text reads well, small or stylised text less so.
 - Clipboard history is **text only** for now; images copied from Moni Shot or other apps aren't listed.
 
 ## Development
