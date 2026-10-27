@@ -1,6 +1,7 @@
-// Scrolling-capture stitcher on synthetic frames (gjs -m tests/helper.test.js).
+// Scrolling-capture stitcher on synthetic frames and update asset rules
+// (gjs -m tests/helper.test.js).
 import GdkPixbuf from 'gi://GdkPixbuf';
-import {stitch, findOffset, rowHashes} from '../src/helper.js';
+import {stitch, findOffset, rowHashes, newer, pickAsset} from '../src/helper.js';
 
 const W = 120, PAGE = 900, VIEW = 200, HEADER = 24, FOOTER = 16;
 const check = (ok, msg) => {
@@ -53,3 +54,19 @@ for (let y = HEADER; y < expected - FOOTER; y++) {
 check(px[0] === 40 && px[(expected - 1) * stride] === 90, 'header and footer appear once');
 check(stitch([frames[0]]).get_height() === VIEW, 'one frame stays as is');
 print('ok    scrolling capture stitches 12 frames with a sticky header/footer, stops at end of page');
+
+check(newer('0.0.10', '0.0.9') && newer('v0.1', '0.0.9') && !newer('0.0.6', '0.0.6') && !newer('0.0.5', 'v0.0.6'), 'version order');
+const dl = 'https://github.com/ingjae/moni/releases/download/v0.0.7/';
+const sha = 'a'.repeat(64);
+const release = assets => ({tag_name: 'v0.0.7', html_url: 'https://github.com/ingjae/moni/releases/tag/v0.0.7', assets});
+const zip = (major, extra = {}) => ({
+    name: `moni@ingjae.github.io.gnome${major}.v0.0.7.zip`,
+    browser_download_url: `${dl}moni%40ingjae.github.io.gnome${major}.v0.0.7.zip`, digest: `sha256:${sha}`, ...extra,
+});
+const both = release([zip('42-44'), zip('45-48')]);
+check(pickAsset(both, '45')?.url.includes('gnome45-48') && pickAsset(both, '42')?.url.includes('gnome42-44'), 'zip per Shell');
+check(pickAsset(both, '45').version === '0.0.7' && pickAsset(both, '45').sha256 === sha, 'version and digest');
+check(!pickAsset(release([zip('45-48', {digest: undefined})]), '45'), 'no digest, no install');
+check(!pickAsset(release([zip('45-48', {browser_download_url: 'https://evil.example/moni.zip'})]), '45'), 'other hosts refused');
+check(!pickAsset(both, '50'), 'no zip for this Shell');
+print('ok    updates pick the zip for this Shell, only from ingjae/moni with a SHA-256 digest');

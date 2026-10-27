@@ -245,9 +245,14 @@ gnome-extensions enable moni@ingjae.github.io
 Prefer a zip? Grab one from [Releases](https://github.com/ingjae/moni/releases):
 
 ```bash
-gnome-extensions install --force moni@ingjae.github.io.gnome45-48.v0.0.6.zip   # Ubuntu 24.04
-gnome-extensions install --force moni@ingjae.github.io.gnome42-44.v0.0.6.zip   # Ubuntu 22.04
+gnome-extensions install --force moni@ingjae.github.io.gnome45-48.v0.0.7.zip   # Ubuntu 24.04
+gnome-extensions install --force moni@ingjae.github.io.gnome42-44.v0.0.7.zip   # Ubuntu 22.04
 ```
+
+**Updates.** Once a day Moni asks GitHub for the latest release. A notification offers **Update**, which
+downloads the zip for your GNOME version, checks it against the SHA-256 digest GitHub publishes and
+installs it. **X11:** *Restart now* reloads the shell with your windows still open. **Wayland:** log out
+and back in. Settings → Updates turns the check off or installs releases without asking.
 
 Build requirements: `python3` and `glib-compile-schemas`. Runtime: only what Ubuntu ships with GNOME
 (`gjs`, GTK 4, libadwaita). `nvidia-smi` is used if present. The optional OCR / QR feature adds
@@ -270,7 +275,9 @@ flowchart LR
     Q["~/.pm2 files<br/>Docker socket + cgroups"] --> C
     UI --> K["capture.js<br/>area select · Shell.Screenshot · pins"]
     K --> E["editor.js<br/>GTK 4 Moni Shot"]
-    K --> H["helper.js<br/>scroll stitching · OCR"]
+    K --> H["helper.js<br/>scroll stitching · OCR · updates"]
+    UI --> U["updater.js<br/>daily check · notification"] --> H
+    H -. "releases/latest · zip + SHA-256" .-> G["github.com/ingjae/moni"]
     E --> H
     E -- "COPY / PIN / SAVED (stdout)" --> K
     K --> R["org.gnome.Shell.Screencast<br/>(GNOME's own recorder)"]
@@ -328,6 +335,7 @@ gsettings --schemadir ~/.local/share/gnome-shell/extensions/moni@ingjae.github.i
 | `screenshot-shortcut` / `record-shortcut` | `<Super><Shift>s` / `<Super><Shift>d` | capture shortcuts (empty = off) |
 | `record-cursor` | `true` | show the pointer in recordings |
 | `ocr` | `false` | OCR and QR codes (turning it on in Settings installs tesseract and zbar) |
+| `update-check` / `update-auto` | `true` / `false` | daily release check / install without asking |
 | `show-clipboard` / `clipboard-shortcut` | `true` / `<Super><Shift>v` | clipboard history icon + shortcut |
 | `clipboard-paste` | `true` | paste into the focused window on pick |
 | `clipboard-size` | `50` | recent items kept (memory only) |
@@ -368,6 +376,8 @@ form, so the two builds can't drift apart.
 - Scrolling capture scrolls with mouse-wheel steps and matches rows exactly. Pages that animate,
   lazy-load or scroll horizontally may stitch short; it stops after 40 frames.
 - OCR quality is tesseract's: clean UI text reads well, small or stylised text less so.
+- An update replaces the files on disk; the running shell keeps the old code until it restarts.
+  The X11 restart and the GNOME 42 (libsoup 2.4) download path haven't been run yet.
 - Clipboard history is **text only** for now; images copied from Moni Shot or other apps aren't listed.
 
 ## Development
@@ -379,14 +389,15 @@ src/
   capture.js      area selection, capture, pins, recording
   clipboard.js    clipboard history, favorites, paste-on-pick
   editor.js       Moni Shot annotation editor (GTK 4, separate process)
-  helper.js       scroll stitching and OCR (separate process, also imported by the editor)
+  updater.js      daily release check, update notification, restart
+  helper.js       scroll stitching, OCR, release download + SHA-256 check (separate process, also imported by the editor)
   prefs.js        libadwaita 1.1-compatible settings window
 tools/build.py    → build/esm, build/legacy, dist/*.zip
 tests/            collector smoke tests, settings backup round trip, UI regressions
 ```
 
 ```bash
-make test      # collector, scroll-stitch, settings-backup and UI-regression tests + legacy build load/syntax check
+make test      # collector, scroll-stitch, update-rule, settings-backup and UI-regression tests + legacy build load/syntax check
 make test-ui   # GTK editor rendering regression tests (requires a graphical session)
 make nested    # throwaway GNOME Shell in a window with Moni loaded
 make logs      # follow gnome-shell logs filtered for moni

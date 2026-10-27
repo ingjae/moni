@@ -2,6 +2,8 @@
 //
 //   gjs -m helper.js ocr <image.png>                 recognized text → stdout
 //   gjs -m helper.js stitch <out.png> <frame.png>…   stitched height → stdout
+//   gjs -m helper.js latest <version> <shell major>  newer release JSON → stdout
+//   gjs -m helper.js install <zip url> <sha256>      verified install → 'ok'
 //
 // The editor imports the same functions directly.
 
@@ -118,6 +120,82 @@ export function stitch(frames) {
     return out;
 }
 
+// ── updates ────────────────────────────────────────────────────────────
+
+const API = 'https://api.github.com/repos/ingjae/moni/releases/latest';
+const DOWNLOAD = 'https://github.com/ingjae/moni/releases/download/';
+
+// '0.0.10' > '0.0.9'; a leading 'v' is ignored.
+export function newer(a, b) {
+    const pa = a.replace(/^v/, '').split('.').map(Number), pb = b.replace(/^v/, '').split('.').map(Number);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+        if ((pa[i] ?? 0) !== (pb[i] ?? 0))
+            return (pa[i] ?? 0) > (pb[i] ?? 0);
+    }
+    return false;
+}
+
+// The zip built for this Shell (gnome42-44 or gnome45-48), only from this
+// repository and only with a GitHub SHA-256 digest; null otherwise.
+export function pickAsset(release, major) {
+    const a = (release.assets ?? []).find(x => x.name.includes(`.gnome${major}-`) && x.name.endsWith('.zip'));
+    const sha256 = a?.digest?.match(/^sha256:([0-9a-f]{64})$/)?.[1];
+    if (!a?.browser_download_url?.startsWith(DOWNLOAD) || !sha256)
+        return null;
+    return {version: release.tag_name.replace(/^v/, ''), page: release.html_url, url: a.browser_download_url, sha256};
+}
+
+// GNOME 43+ ships libsoup 3; Ubuntu 22.04 (GNOME 42) has 2.4.
+async function fetchBytes(url) {
+    let Soup;
+    try {
+        Soup = (await import('gi://Soup?version=3.0')).default;
+    } catch (e) {
+        Soup = (await import('gi://Soup?version=2.4')).default;
+    }
+    const session = new Soup.Session({user_agent: 'moni-updater', timeout: 60});
+    const msg = Soup.Message.new('GET', url);
+    msg.request_headers.append('Accept', url === API ? 'application/vnd.github+json' : 'application/octet-stream');
+    let bytes;
+    if (session.send_and_read) {
+        bytes = session.send_and_read(msg, null).toArray();
+    } else {
+        session.send_message(msg);
+        bytes = msg.response_body.flatten().get_data();
+    }
+    const status = msg.get_status?.() ?? msg.status_code;
+    if (status !== 200)
+        throw new Error(`HTTP ${status} for ${url}`);
+    return bytes;
+}
+
+async function latest(current, major) {
+    const release = JSON.parse(new TextDecoder().decode(await fetchBytes(API)));
+    const asset = release.draft || release.prerelease ? null : pickAsset(release, major);
+    return asset && newer(asset.version, current) ? asset : null;
+}
+
+async function install(url, sha256) {
+    if (!url.startsWith(DOWNLOAD) || !/^[0-9a-f]{64}$/.test(sha256))
+        throw new Error('refusing: not a Moni release asset');
+    const bytes = await fetchBytes(url);
+    const got = GLib.compute_checksum_for_data(GLib.ChecksumType.SHA256, bytes);
+    if (got !== sha256)
+        throw new Error(`checksum mismatch: expected ${sha256}, got ${got}`);
+    const [file, stream] = Gio.File.new_tmp('moni-XXXXXX.zip');
+    stream.output_stream.write_all(bytes, null);
+    stream.close(null);
+    try {
+        const proc = Gio.Subprocess.new(['gnome-extensions', 'install', '--force', file.get_path()],
+            Gio.SubprocessFlags.STDERR_PIPE);
+        const [, , err] = proc.communicate_utf8(null, null);
+        if (!proc.get_successful())
+            throw new Error(err.trim() || 'gnome-extensions install failed');
+    } finally {
+        file.delete(null);
+    }
+}
+
 // ── command line ───────────────────────────────────────────────────────
 
 if (System.programInvocationName.endsWith('helper.js')) {
@@ -131,8 +209,15 @@ if (System.programInvocationName.endsWith('helper.js')) {
             const out = stitch(args.slice(1).map(f => GdkPixbuf.Pixbuf.new_from_file(f)));
             out.savev(args[0], 'png', [], []);
             print(out.get_height());
+        } else if (cmd === 'latest') {
+            const found = await latest(args[0], args[1]);
+            if (found)
+                print(JSON.stringify(found));
+        } else if (cmd === 'install') {
+            await install(args[0], args[1]);
+            print('ok');
         } else {
-            printerr('usage: gjs -m helper.js ocr <png> | stitch <out.png> <frame.png>…');
+            printerr('usage: gjs -m helper.js ocr <png> | stitch <out.png> <frame.png>… | latest <version> <major> | install <url> <sha256>');
             code = 2;
         }
     })().catch(e => {

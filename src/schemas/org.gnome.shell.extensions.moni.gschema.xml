@@ -31,6 +31,10 @@
     <key name="clipboard-paste" type="b"><default>true</default><summary>Paste into the focused window on pick</summary></key>
     <key name="clipboard-favorites" type="as"><default>[]</default><summary>Starred clipboard items</summary></key>
     <key name="ocr" type="b"><default>false</default><summary>Text recognition (OCR) and QR codes in screenshots</summary></key>
+    <key name="update-check" type="b"><default>true</default><summary>Check GitHub once a day for a new release</summary></key>
+    <key name="update-auto" type="b"><default>false</default><summary>Install new releases without asking</summary></key>
+    <key name="update-last-check" type="x"><default>0</default><summary>Unix time of the last update check</summary></key>
+    <key name="update-notified" type="s"><default>''</default><summary>Last release version already announced</summary></key>
     <key name="record-cursor" type="b"><default>true</default><summary>Show the pointer in recordings</summary></key>
   </schema>
 </schemalist>
