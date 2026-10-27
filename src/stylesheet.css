@@ -42,7 +42,5 @@
 .moni-clip-header { font-size: 8pt; font-weight: 600; color: rgba(128, 128, 128, 1); }
 .moni-clip-star { padding: 2px 4px; border-radius: 6px; }
 .moni-clip-star:hover { background-color: rgba(128, 128, 128, 0.2); }
-.moni-quick { spacing: 2px; }
-.moni-quick-button { padding: 0 6px; border-radius: 6px; font-size: 9pt; font-weight: 600; min-width: 18px; }
-.moni-quick-button:hover { background-color: rgba(255, 255, 255, 0.12); }
-.moni-quick-done { background-color: rgba(48, 209, 88, 0.35); }
+.moni-quick-button { font-weight: 600; }
+#panel .panel-button.moni-quick-done { box-shadow: inset 0 0 0 100px rgba(48, 209, 88, 0.35); }

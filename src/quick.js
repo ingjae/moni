@@ -30,6 +30,12 @@ class MoniQuickIndicator extends PanelMenu.Button {
         super._init(0.5, 'Moni Quick Copy', true);
         this._settings = settings;
         this._onCopy = onCopy;
+        // The holder is not a button itself: each item is a full panel
+        // button, so the whole highlighted area copies.
+        this.remove_style_class_name('panel-button');
+        this.reactive = false;
+        this.track_hover = false;
+        this.can_focus = false;
         this._box = new St.BoxLayout({style_class: 'moni-quick'});
         this.add_child(this._box);
         this._id = settings.connect('changed::quick-items', () => this._rebuild());
@@ -40,7 +46,7 @@ class MoniQuickIndicator extends PanelMenu.Button {
         this._box.destroy_all_children();
         for (const item of readItems(this._settings)) {
             const label = new St.Label({text: item.icon.trim(), y_align: Clutter.ActorAlign.CENTER});
-            const button = new St.Button({style_class: 'moni-quick-button', child: label, y_align: Clutter.ActorAlign.CENTER});
+            const button = new St.Button({style_class: 'panel-button moni-quick-button', child: label, can_focus: true, track_hover: true});
             button.connect('clicked', () => this._copy(item.text, button, label));
             this._box.add_child(button);
         }

@@ -351,6 +351,11 @@ export default class MoniPreferences extends ExtensionPreferences {
         icon.connect('changed', sync);
         view.buffer.connect('changed', sync);
         sync();
+        // Bring Settings back to the front, or it can end up behind other windows.
+        dlg.connect('close-request', () => {
+            window.present();
+            return false;
+        });
         cancel.connect('clicked', () => dlg.close());
         save.connect('clicked', () => {
             onSave({icon: icon.text.trim(), text: text()});
