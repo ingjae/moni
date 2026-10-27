@@ -65,9 +65,10 @@ carrier (bus-off). An idle bus stays out of your way and only appears in the dro
 <td valign="top">
 
 ### 📸 Shottr-style capture on Linux
-<kbd>Super</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>: drag an area and an editor opens with arrows, boxes, a freehand pen,
-highlighter, text, pixelate, numbered steps, a **pixel ruler** and a color picker. Anything you draw can be moved afterwards. Copy it, save it,
-or **pin** it above all your windows as a floating reference.
+<kbd>Super</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>: drag an area, a window, the last area or a **scrolling page**,
+with a pixel loupe. The editor has 15 tools, from arrows and a freehand pen to blur, smart erase,
+spotlight, a **pixel ruler** and crop, plus gradient backdrops. Everything stays movable. Optional OCR
+copies text and opens QR links. Copy, save or **pin** the result above all your windows.
 
 </td>
 <td valign="top">
@@ -137,7 +138,7 @@ every graph, badge and dot gray, and alerts invert to white instead of red. Swit
 <p align="center">
   <img src="docs/dashboard.png" alt="Moni dropdown, scrolled: Screenshot and Record actions on top, then network with copyable IPs, storage, ROS 2 process table, rosbag recording ETA, PM2 apps and Docker containers" width="380">
   &nbsp;&nbsp;
-  <img src="docs/editor.png" alt="Moni Shot editor with an arrow, a rectangle, numbered steps and a 560 px ruler" width="560">
+  <img src="docs/editor.png" alt="Moni Shot editor: icon toolbar, spotlight, oval, arrow, text bubble, numbered steps, pen, ruler and blur, with the selected oval showing resize handles" width="560">
 </p>
 <p align="center"><sub>Real captures on Ubuntu 24.04 / GNOME 46. Left: the dropdown, scrolled to the robotics tiles (capture actions stay on top). Right: the Moni Shot editor. IPs, paths and internal container names are blurred.</sub></p>
 
@@ -174,6 +175,11 @@ the panel stays clean when no robot is running.
 | Shortcut | Action |
 |---|---|
 | <kbd>Super</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> | Screenshot: drag an area (click = whole monitor, Esc = cancel) → **Moni Shot** editor |
+| …then <kbd>Space</kbd> | Window mode: click the window to capture |
+| …then <kbd>Enter</kbd> | Capture the same area as last time |
+| …then <kbd>S</kbd> | **Scrolling capture**: drag over the part that scrolls; Moni scrolls it and stitches one tall image (sticky headers kept once) |
+| …then <kbd>T</kbd> | Copy text: drag over text → OCR → clipboard (needs the OCR option) |
+| …then <kbd>3</kbd> / <kbd>5</kbd> | Timer: capture the screen after 3 or 5 s |
 | <kbd>Super</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> | Start / stop screen recording → `~/Videos/Screencasts/Moni_<time>.webm` |
 
 Both are also at the top of the dropdown and can be rebound in Settings. They default to <kbd>Super</kbd>,
@@ -182,20 +188,34 @@ not <kbd>Ctrl</kbd>, so they don't steal *Save As* from your editor, browser or 
 
 **Moni Shot editor keys**
 
-| Key | Tool | | Key | Action |
+| Key | Tool | | Key | Tool |
 |---|---|---|---|---|
-| <kbd>A</kbd> | ↗ Arrow | | <kbd>1</kbd>–<kbd>8</kbd> | Color |
-| <kbd>R</kbd> | ▭ Rectangle | | <kbd>Ctrl</kbd>+<kbd>Z</kbd> | Undo |
-| <kbd>H</kbd> | ▮ Highlighter | | <kbd>Ctrl</kbd>+<kbd>C</kbd> | Copy (stays on the clipboard after the editor closes) |
-| <kbd>T</kbd> | Text | | <kbd>Ctrl</kbd>+<kbd>S</kbd> | Save → `~/Pictures/Screenshots/Moni_<time>.png` |
-| <kbd>B</kbd> | ▦ Pixelate | | <kbd>Ctrl</kbd>+<kbd>P</kbd> | **Pin** above all windows: drag to move, scroll to zoom, right-click to close |
-| <kbd>N</kbd> | ① Numbered steps | | <kbd>Esc</kbd> | Close |
-| <kbd>M</kbd> | ⟷ Ruler (px, dx × dy) | | | |
-| <kbd>I</kbd> | ◎ Color picker (copies hex) | | | |
-| <kbd>P</kbd> | ✎ Pen (freehand) | | | |
-| <kbd>V</kbd> | ✥ Move: drag any annotation (undo puts it back) | | | |
+| <kbd>V</kbd> | Select and move: drag, resize by the handles, <kbd>Del</kbd> deletes, arrows nudge | | <kbd>B</kbd> | Pixelate |
+| <kbd>A</kbd> | Arrow | | <kbd>G</kbd> | Blur |
+| <kbd>L</kbd> | Line | | <kbd>E</kbd> | Smart erase (fills with the surrounding color) |
+| <kbd>R</kbd> | Rectangle | | <kbd>S</kbd> | Spotlight (dims everything else) |
+| <kbd>O</kbd> | Oval | | <kbd>M</kbd> | Ruler (px, dx × dy) |
+| <kbd>P</kbd> | Pen (freehand) | | <kbd>I</kbd> | Color picker (copies hex) |
+| <kbd>H</kbd> | Highlighter | | <kbd>C</kbd> | Crop |
+| <kbd>T</kbd> | Text (double-click to edit) | | <kbd>N</kbd> | Numbered steps |
 
-The status bar always shows the cursor position in image pixels and the color under it.
+| Key | Action | | Key | Action |
+|---|---|---|---|---|
+| <kbd>1</kbd>–<kbd>8</kbd> | Color | | <kbd>Ctrl</kbd>+<kbd>C</kbd> | Copy (stays on the clipboard after the editor closes) |
+| <kbd>[</kbd> <kbd>]</kbd> | Line width | | <kbd>Ctrl</kbd>+<kbd>S</kbd> | Save → `~/Pictures/Screenshots/Moni_<time>.png` |
+| <kbd>F</kbd> | Filled shapes / text bubble | | <kbd>Ctrl</kbd>+<kbd>P</kbd> | **Pin** above all windows: drag to move, scroll to zoom, right-click to close |
+| <kbd>Shift</kbd>+drag | 45° lines, squares and circles | | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> | Undo / redo |
+| <kbd>Ctrl</kbd>+scroll | Zoom (<kbd>Ctrl</kbd>+<kbd>0</kbd> fit, <kbd>Ctrl</kbd>+<kbd>1</kbd> 100 %) | | <kbd>Space</kbd>+drag | Pan |
+| <kbd>Esc</kbd> | Deselect, then close | | | |
+
+Color, width and fill also restyle the selected annotation. The bottom bar shows the cursor position
+in image pixels and the color under it, and holds the backdrop (gradient, rounded corners, shadow),
+OCR, pin and save buttons.
+
+**OCR and QR codes** are off by default. Turn on *Settings → Screenshot & recording → Text recognition*
+and Moni installs `tesseract-ocr` (English + Korean) and `zbar-tools` through apt, behind your desktop's
+password prompt. Then <kbd>T</kbd> in the selector copies text, the editor gets an OCR button, and a
+captured QR code shows up as a bar with *Open* and *Copy*. Recognition runs locally.
 
 ### 📋 Clipboard history
 
@@ -249,6 +269,8 @@ flowchart LR
     Q["~/.pm2 files<br/>Docker socket + cgroups"] --> C
     UI --> K["capture.js<br/>area select · Shell.Screenshot · pins"]
     K --> E["editor.js<br/>GTK 4 Moni Shot"]
+    K --> H["helper.js<br/>scroll stitching · OCR"]
+    E --> H
     E -- "COPY / PIN / SAVED (stdout)" --> K
     K --> R["org.gnome.Shell.Screencast<br/>(GNOME's own recorder)"]
 ```
@@ -262,7 +284,9 @@ per PID, so a warm scan only re-reads `/proc/<pid>/stat` for ROS processes. A yo
 process. Things that must outlive it, like the clipboard and pinned images, are handed back to the
 shell over stdout. That is why a copy survives closing the editor. Recording goes through GNOME's own
 screencast service, which only accepts calls from the shell's bus connection, and that is exactly
-where an extension runs.
+where an extension runs. Scrolling capture drives a virtual mouse wheel from the shell, grabs a frame
+per step and leaves the row matching and stitching to `helper.js` in its own process, so the
+compositor never stalls.
 
 **Performance**, measured on an i7-14700T (28 threads) with `make test`:
 
@@ -302,6 +326,7 @@ gsettings --schemadir ~/.local/share/gnome-shell/extensions/moni@ingjae.github.i
 | `internet-probe` / `probe-host` | `true` / `1.1.1.1` | TCP-443 latency check |
 | `screenshot-shortcut` / `record-shortcut` | `<Super><Shift>s` / `<Super><Shift>d` | capture shortcuts (empty = off) |
 | `record-cursor` | `true` | show the pointer in recordings |
+| `ocr` | `false` | OCR and QR codes (turning it on in Settings installs tesseract and zbar) |
 | `show-clipboard` / `clipboard-shortcut` | `true` / `<Super><Shift>v` | clipboard history icon + shortcut |
 | `clipboard-paste` | `true` | paste into the focused window on pick |
 | `clipboard-size` | `50` | recent items kept (memory only) |
@@ -350,13 +375,14 @@ src/
   capture.js      area selection, capture, pins, recording
   clipboard.js    clipboard history, favorites, paste-on-pick
   editor.js       Moni Shot annotation editor (GTK 4, separate process)
+  helper.js       scroll stitching and OCR (separate process, also imported by the editor)
   prefs.js        libadwaita 1.1-compatible settings window
 tools/build.py    → build/esm, build/legacy, dist/*.zip
 tests/            collector smoke tests, settings backup round trip, UI regressions
 ```
 
 ```bash
-make test      # collector, settings-backup and UI-regression tests + legacy build load/syntax check
+make test      # collector, scroll-stitch, settings-backup and UI-regression tests + legacy build load/syntax check
 make test-ui   # GTK editor rendering regression tests (requires a graphical session)
 make nested    # throwaway GNOME Shell in a window with Moni loaded
 make logs      # follow gnome-shell logs filtered for moni

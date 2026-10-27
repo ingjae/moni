@@ -8,6 +8,8 @@ import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/ex
 const POSITIONS = ['left', 'center', 'right'];
 const FORMAT = 'moni-settings';
 const REPO = 'https://github.com/ingjae/moni';
+const OCR_PACKAGES = ['tesseract-ocr', 'tesseract-ocr-eng', 'tesseract-ocr-kor', 'zbar-tools'];
+const ocrInstalled = () => ['tesseract', 'zbarimg'].every(p => GLib.find_program_in_path(p));
 
 // Every schema key as plain JSON, so the file is readable and diffable.
 function exportSettings(settings) {
@@ -68,6 +70,7 @@ export default class MoniPreferences extends ExtensionPreferences {
             r.add_suffix(widget);
             r.activatable_widget = widget;
             g.add(r);
+            return r;
         };
         const toggle = (g, key, title, subtitle = '') => {
             const sw = new Gtk.Switch();
@@ -107,7 +110,8 @@ export default class MoniPreferences extends ExtensionPreferences {
         row(net, 'Probe host', 'Port 443', entry);
 
         const capture = group('Screenshot & recording',
-            'Drag an area (click = whole screen) → annotate, copy, save or pin. Recordings go to ~/Videos/Screencasts. ' +
+            'Drag an area (click = whole screen) → annotate, copy, save or pin. While selecting: Space window, ' +
+            'Enter last area, S scrolling capture, 3 / 5 timer. Recordings go to ~/Videos/Screencasts. ' +
             'Accelerator syntax, e.g. <Super><Shift>s. Empty disables. Print still opens GNOME\'s own tool.');
         const accel = (key, title, g = capture) => {
             const e = new Gtk.Entry({width_chars: 18, text: settings.get_strv(key)[0] ?? ''});
@@ -128,6 +132,7 @@ export default class MoniPreferences extends ExtensionPreferences {
         accel('screenshot-shortcut', 'Screenshot');
         accel('record-shortcut', 'Start / stop recording');
         toggle(capture, 'record-cursor', 'Show pointer in recordings');
+        this._ocrRow(window, settings, capture, row);
 
         const clip = group('Clipboard history',
             'Super+Shift+V or the 📋 icon: type to search, Enter or click to paste, ★ to keep an item. ' +
@@ -202,5 +207,50 @@ export default class MoniPreferences extends ExtensionPreferences {
             row(about, title, subtitle, new Gtk.LinkButton({label, uri}));
         link('GitHub', 'Source code, releases and docs', 'github.com/ingjae/moni', REPO);
         link('Report an issue', 'Bugs, questions, feature requests', 'Open issue', `${REPO}/issues/new`);
+    }
+
+    // OCR needs tesseract and zbar. Turning the switch on installs them
+    // through apt with the desktop's own password prompt (pkexec).
+    _ocrRow(window, settings, g, row) {
+        const sw = new Gtk.Switch({active: settings.get_boolean('ocr')});
+        const info = 'Selector T: copy text from an area · editor: OCR button and QR links';
+        const r = row(g, 'Text recognition (OCR) and QR codes', info, sw);
+        const command = `sudo apt install ${OCR_PACKAGES.join(' ')}`;
+        const fail = msg => {
+            sw.active = false;
+            r.subtitle = GLib.markup_escape_text(`${msg} — or run: ${command}`, -1);
+        };
+        sw.connect('notify::active', () => {
+            if (sw.active === settings.get_boolean('ocr'))
+                return;
+            if (!sw.active || ocrInstalled()) {
+                settings.set_boolean('ocr', sw.active);
+                r.subtitle = info;
+                return;
+            }
+            if (!GLib.find_program_in_path('pkexec') || !GLib.find_program_in_path('apt-get')) {
+                fail('Install tesseract and zbar first');
+                return;
+            }
+            sw.sensitive = false;
+            r.subtitle = 'Installing tesseract (English, Korean) and zbar… approve the password prompt';
+            try {
+                const proc = Gio.Subprocess.new(['pkexec', 'env', 'DEBIAN_FRONTEND=noninteractive',
+                    'apt-get', 'install', '-y', ...OCR_PACKAGES], Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE);
+                proc.wait_async(null, () => {
+                    sw.sensitive = true;
+                    if (proc.get_successful() && ocrInstalled()) {
+                        settings.set_boolean('ocr', true);
+                        r.subtitle = info;
+                        window.add_toast(new Adw.Toast({title: 'OCR installed'}));
+                    } else {
+                        fail('Install cancelled or failed');
+                    }
+                });
+            } catch (e) {
+                sw.sensitive = true;
+                fail(e.message);
+            }
+        });
     }
 }

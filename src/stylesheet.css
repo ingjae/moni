@@ -34,6 +34,8 @@
 .moni-ip-iface { font-size: 9.5pt; }
 .moni-accel { font-size: 8.5pt; padding-left: 24px; color: rgba(128, 128, 128, 1); }
 .moni-select-hint { background-color: rgba(30, 30, 30, 0.82); color: #ffffff; border-radius: 10px; padding: 7px 14px; font-size: 10.5pt; }
+.moni-stop:hover { background-color: rgba(255, 69, 58, 0.92); }
+.moni-countdown { background-color: rgba(30, 30, 30, 0.78); color: #ffffff; border-radius: 28px; padding: 18px 44px; font-size: 64pt; font-weight: 600; }
 .moni-pin { box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45); border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 6px; }
 .moni-clip-search { min-width: 340px; border-radius: 8px; }
 .moni-clip-scroll { max-height: 460px; }

@@ -18,7 +18,7 @@ SRC, BUILD, DIST = ROOT / 'src', ROOT / 'build', ROOT / 'dist'
 TARGETS = {'esm': ['45', '46', '47', '48'], 'legacy': ['42', '43', '44']}
 JS = ['extension.js', 'prefs.js', 'collectors.js', 'capture.js', 'clipboard.js']
 # Runs as its own `gjs -m` process on every GNOME version: copied untouched.
-STANDALONE = ['editor.js']
+STANDALONE = ['editor.js', 'helper.js']
 
 SHIM = """const ExtensionUtils = imports.misc.extensionUtils;
 const Me = ExtensionUtils.getCurrentExtension();
@@ -57,6 +57,8 @@ def to_legacy(name, src):
             base = m[1]
         elif m := re.match(r"import \* as (\w+) from '\./(\w+)\.js';$", line):
             out.append(f'const {m[1]} = Me.imports.{m[2]};')
+        elif line == "import Cairo from 'cairo';":
+            out.append('const Cairo = imports.cairo;')
         elif line.startswith('import '):
             sys.exit(f'{name}: no legacy rule for: {line}')
         elif m := re.match(r'export default class (\w+)(.*)$', line):

@@ -30,6 +30,7 @@
     <key name="clipboard-size" type="i"><default>50</default><summary>Recent items kept (memory only)</summary></key>
     <key name="clipboard-paste" type="b"><default>true</default><summary>Paste into the focused window on pick</summary></key>
     <key name="clipboard-favorites" type="as"><default>[]</default><summary>Starred clipboard items</summary></key>
+    <key name="ocr" type="b"><default>false</default><summary>Text recognition (OCR) and QR codes in screenshots</summary></key>
     <key name="record-cursor" type="b"><default>true</default><summary>Show the pointer in recordings</summary></key>
   </schema>
 </schemalist>

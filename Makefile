@@ -22,6 +22,7 @@ uninstall:
 test: build
 	node tests/ui-regressions.test.cjs
 	gjs -m tests/collectors.test.js
+	gjs -m tests/helper.test.js
 	GSETTINGS_BACKEND=memory gjs -m tests/settings-backup.test.js
 	gjs -c "imports.searchPath.unshift('build/legacy'); const C = imports.collectors; \
 	  if (!C.readMemory().total || !new C.CpuSampler()) throw new Error('legacy collectors broken'); \
