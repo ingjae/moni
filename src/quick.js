@@ -2,7 +2,8 @@
 //
 // Each item in the `quick-items` setting (a JSON list of {icon, text}) is a
 // small panel button showing its icon — a short label or an emoji. A click
-// puts the text on the clipboard; the text itself is never shown.
+// copies the text, pastes it at the cursor, or both (`quick-action`); the
+// text itself is never shown.
 
 import GObject from 'gi://GObject';
 import GLib from 'gi://GLib';
@@ -11,6 +12,8 @@ import Clutter from 'gi://Clutter';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
+
+import * as Clip from './clipboard.js';
 
 // Valid items only; a broken setting shows nothing instead of throwing.
 export function readItems(settings) {
@@ -46,16 +49,51 @@ class MoniQuickIndicator extends PanelMenu.Button {
         this._box.destroy_all_children();
         for (const item of readItems(this._settings)) {
             const label = new St.Label({text: item.icon.trim(), y_align: Clutter.ActorAlign.CENTER});
-            const button = new St.Button({style_class: 'panel-button moni-quick-button', child: label, can_focus: true, track_hover: true});
-            button.connect('clicked', () => this._copy(item.text, button, label));
+            // No key focus on click: the paste must reach the window that has it.
+            const button = new St.Button({style_class: 'panel-button moni-quick-button', child: label, can_focus: false, track_hover: true});
+            button.connect('clicked', () => this._use(item.text, button, label));
             this._box.add_child(button);
         }
     }
 
-    // Copied: the button shows ✓ for a moment.
-    _copy(text, button, label) {
-        this._onCopy?.(text);
-        St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, text);
+    // copy: clipboard only · paste: type it at the cursor and put the old
+    // clipboard text back · both: paste and keep it on the clipboard.
+    _use(text, button, label) {
+        const clipboard = St.Clipboard.get_default();
+        const action = this._settings.get_string('quick-action');
+        const put = t => {
+            this._onCopy?.(t);
+            clipboard.set_text(St.ClipboardType.CLIPBOARD, t);
+        };
+        if (action === 'copy') {
+            put(text);
+        } else {
+            clipboard.get_text(St.ClipboardType.CLIPBOARD, (_c, previous) => {
+                if (this._destroyed)
+                    return;
+                put(text);
+                this._later(150, () => {
+                    this._vk ??= Clutter.get_default_backend().get_default_seat()
+                        .create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
+                    Clip.typePaste(this._vk);
+                    if (action === 'paste' && previous)
+                        this._later(400, () => put(previous));
+                });
+            });
+        }
+        this._flash(button, label);
+    }
+
+    _later(ms, fn) {
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
+            if (!this._destroyed)
+                fn();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    // The button shows ✓ for a moment.
+    _flash(button, label) {
         const icon = label.text;
         label.text = '✓';
         button.add_style_class_name('moni-quick-done');
@@ -70,6 +108,7 @@ class MoniQuickIndicator extends PanelMenu.Button {
 
     destroy() {
         this._destroyed = true;
+        this._vk = null;
         this._settings.disconnect(this._id);
         super.destroy();
     }

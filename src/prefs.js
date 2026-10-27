@@ -147,6 +147,11 @@ export default class MoniPreferences extends ExtensionPreferences {
             'Buttons in the top bar that copy a fixed text in one click — a token, an address, a command. ' +
             'Copies stay out of the clipboard history. Texts are stored in plain text in dconf and included in Export.');
         toggle(quick, 'show-quick', 'Quick copy buttons', 'Shown while at least one item exists');
+        const ACTIONS = ['both', 'copy', 'paste'];
+        const action = Gtk.DropDown.new_from_strings(['Copy and paste', 'Copy only', 'Paste only']);
+        action.selected = Math.max(0, ACTIONS.indexOf(settings.get_string('quick-action')));
+        action.connect('notify::selected', () => settings.set_string('quick-action', ACTIONS[action.selected]));
+        row(quick, 'On click', 'Paste types it where the cursor is; Paste only keeps your clipboard as it was', action);
         this._quickItems(window, settings, quick);
 
         const general = group('General');
