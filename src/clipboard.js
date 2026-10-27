@@ -21,6 +21,18 @@ const SECRET_HINT = 'x-kde-passwordManagerHint';
 // Terminals paste with Ctrl+Shift+V.
 const TERMINALS = /terminal|kitty|alacritty|wezterm|tilix|terminator|konsole|foot|ghostty|xterm|guake|blackbox|ptyxis/i;
 
+// Types the paste shortcut into the focused window: Ctrl+V, or
+// Ctrl+Shift+V in terminals.
+export function typePaste(vk) {
+    const terminal = TERMINALS.test(global.display.focus_window?.get_wm_class() ?? '');
+    const keys = terminal
+        ? [Clutter.KEY_Control_L, Clutter.KEY_Shift_L, Clutter.KEY_v]
+        : [Clutter.KEY_Control_L, Clutter.KEY_v];
+    const t = GLib.get_monotonic_time();
+    keys.forEach(k => vk.notify_keyval(t, k, Clutter.KeyState.PRESSED));
+    [...keys].reverse().forEach(k => vk.notify_keyval(t, k, Clutter.KeyState.RELEASED));
+}
+
 function preview(text) {
     const one = text.replace(/\s+/g, ' ').trim();
     return one.length > 60 ? `${one.slice(0, 59)}…` : one;
@@ -76,10 +88,19 @@ class MoniClipboardIndicator extends PanelMenu.Button {
         return this._settings.get_strv('clipboard-favorites');
     }
 
+    // The next clipboard change with this text is not recorded.
+    ignore(text) {
+        this._ignore = text;
+    }
+
     _readClipboard() {
         if (this._clipboard.get_mimetypes(St.ClipboardType.CLIPBOARD).includes(SECRET_HINT))
             return;
         this._clipboard.get_text(St.ClipboardType.CLIPBOARD, (_c, text) => {
+            if (text && text === this._ignore) {
+                this._ignore = null;
+                return;
+            }
             if (!text || !text.trim() || text.length > MAX_TEXT || this._destroyed)
                 return;
             this._history = [text, ...this._history.filter(t => t !== text)]
@@ -191,16 +212,9 @@ class MoniClipboardIndicator extends PanelMenu.Button {
             GLib.source_remove(this._pasteId);
         this._pasteId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 150, () => {
             this._pasteId = 0;
-            const win = global.display.focus_window;
-            const terminal = TERMINALS.test(win?.get_wm_class() ?? '');
             this._vk ??= Clutter.get_default_backend().get_default_seat()
                 .create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
-            const keys = terminal
-                ? [Clutter.KEY_Control_L, Clutter.KEY_Shift_L, Clutter.KEY_v]
-                : [Clutter.KEY_Control_L, Clutter.KEY_v];
-            const t = GLib.get_monotonic_time();
-            keys.forEach(k => this._vk.notify_keyval(t, k, Clutter.KeyState.PRESSED));
-            [...keys].reverse().forEach(k => this._vk.notify_keyval(t, k, Clutter.KeyState.RELEASED));
+            typePaste(this._vk);
             return GLib.SOURCE_REMOVE;
         });
     }

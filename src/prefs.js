@@ -9,6 +9,10 @@ const POSITIONS = ['left', 'center', 'right'];
 const FORMAT = 'moni-settings';
 const REPO = 'https://github.com/ingjae/moni';
 const OCR_PACKAGES = ['tesseract-ocr', 'tesseract-ocr-eng', 'tesseract-ocr-kor', 'zbar-tools'];
+// Images picked for quick copy buttons are copied here, so moving or
+// deleting the original does not break the button.
+const QUICK_ICONS = GLib.build_filenamev([GLib.get_user_data_dir(), 'moni', 'quick-icons']);
+const dropQuickIcon = path => path?.startsWith(`${QUICK_ICONS}/`) && GLib.unlink(path);
 const ocrInstalled = () => ['tesseract', 'zbarimg'].every(p => GLib.find_program_in_path(p));
 
 // Every schema key as plain JSON, so the file is readable and diffable.
@@ -143,6 +147,17 @@ export default class MoniPreferences extends ExtensionPreferences {
         toggle(clip, 'clipboard-paste', 'Paste on pick', 'Off: only copies the item back to the clipboard');
         spin(clip, 'clipboard-size', 'Recent items', 'Kept until logout', 10, 200, 10);
 
+        const quick = group('Quick copy',
+            'One-click buttons in the top bar for a token, an address or a command. ' +
+            'Not kept in clipboard history; stored as plain text in dconf and included in Export.');
+        toggle(quick, 'show-quick', 'Quick copy buttons', 'Shown while at least one item exists');
+        const ACTIONS = ['both', 'copy', 'paste'];
+        const action = Gtk.DropDown.new_from_strings(['Copy and paste', 'Copy only', 'Paste only']);
+        action.selected = Math.max(0, ACTIONS.indexOf(settings.get_string('quick-action')));
+        action.connect('notify::selected', () => settings.set_string('quick-action', ACTIONS[action.selected]));
+        row(quick, 'On click', 'Paste types it at the cursor; Paste only restores your clipboard', action);
+        this._quickItems(window, settings, quick);
+
         const general = group('General');
         spin(general, 'update-interval', 'Update interval', 'Milliseconds', 500, 10000, 250);
         spin(general, 'graph-width', 'Graph width', 'Pixels per panel graph', 20, 120, 4);
@@ -269,6 +284,157 @@ export default class MoniPreferences extends ExtensionPreferences {
                 button.sensitive = true;
             }
         });
+    }
+
+    // Item rows with Edit / Delete, then an Add row; edits open a small dialog.
+    _quickItems(window, settings, g) {
+        const load = () => {
+            try {
+                const items = JSON.parse(settings.get_string('quick-items'));
+                return Array.isArray(items) ? items : [];
+            } catch (e) {
+                return [];
+            }
+        };
+        const store = items => settings.set_string('quick-items', JSON.stringify(items));
+        const iconButton = (icon, tooltip, onClick) => {
+            const b = new Gtk.Button({icon_name: icon, tooltip_text: tooltip, valign: Gtk.Align.CENTER});
+            b.add_css_class('flat');
+            b.connect('clicked', onClick);
+            return b;
+        };
+        let rows = [];
+        const render = () => {
+            rows.forEach(r => g.remove(r));
+            rows = load().map((item, i) => {
+                // The icon as the top bar shows it, then the text, masked.
+                const r = new Adw.ActionRow({title: `•••• ${String(item.text ?? '').length} characters`});
+                const tile = item.image
+                    ? new Gtk.Image({file: item.image, pixel_size: 20})
+                    : new Gtk.Label({label: String(item.icon ?? ''), css_classes: ['heading']});
+                tile.width_request = 36;
+                r.add_prefix(tile);
+                r.add_suffix(iconButton('document-edit-symbolic', 'Edit', () => this._quickDialog(window, item, edited => {
+                    const items = load();
+                    if (items[i]?.image !== edited.image)
+                        dropQuickIcon(items[i]?.image);
+                    items[i] = edited;
+                    store(items);
+                })));
+                r.add_suffix(iconButton('user-trash-symbolic', 'Delete', () => {
+                    dropQuickIcon(item.image);
+                    store(load().filter((_x, k) => k !== i));
+                }));
+                g.add(r);
+                return r;
+            });
+            const add = new Adw.ActionRow({title: 'Add item'});
+            add.add_suffix(iconButton('list-add-symbolic', 'Add', () => this._quickDialog(window, null, item => store([...load(), item]))));
+            g.add(add);
+            rows.push(add);
+        };
+        settings.connect('changed::quick-items', render);
+        render();
+    }
+
+    // Icon: up to a few characters typed in, or an emoji from the picker.
+    _quickDialog(window, item, onSave) {
+        const dlg = new Gtk.Window({transient_for: window, modal: true, title: item ? 'Edit quick copy' : 'New quick copy', default_width: 460});
+        const header = new Gtk.HeaderBar({show_title_buttons: false});
+        const cancel = new Gtk.Button({label: 'Cancel'});
+        const save = new Gtk.Button({label: 'Save'});
+        save.add_css_class('suggested-action');
+        header.pack_start(cancel);
+        header.pack_end(save);
+        dlg.set_titlebar(header);
+
+        const box = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 8,
+            margin_top: 18, margin_bottom: 18, margin_start: 18, margin_end: 18});
+        const heading = text => new Gtk.Label({label: text, xalign: 0, css_classes: ['heading']});
+        box.append(heading('Icon'));
+        const iconRow = new Gtk.Box({spacing: 6});
+        const icon = new Gtk.Entry({max_length: 8, width_chars: 10, placeholder_text: 'GH or 🔑', text: item?.icon ?? ''});
+        const chooser = new Gtk.EmojiChooser();
+        chooser.connect('emoji-picked', (_c, emoji) => (icon.text = emoji));
+        iconRow.append(icon);
+        iconRow.append(new Gtk.MenuButton({label: '😀', tooltip_text: 'Pick an emoji', popover: chooser}));
+        iconRow.append(new Gtk.Label({label: 'Short text (e.g. GH, IP) or an emoji', css_classes: ['dim-label']}));
+        box.append(iconRow);
+
+        // An image replaces the text icon in the top bar.
+        let image = item?.image ?? '';
+        const imageRow = new Gtk.Box({spacing: 6});
+        const preview = new Gtk.Image({pixel_size: 24});
+        const pick = new Gtk.Button({label: 'Choose image…'});
+        const clear = new Gtk.Button({icon_name: 'edit-clear-symbolic', tooltip_text: 'Remove image'});
+        const showImage = () => {
+            preview.set_from_file(image || null);
+            preview.visible = clear.visible = !!image;
+        };
+        pick.connect('clicked', () => {
+            const fc = new Gtk.FileChooserNative({title: 'Choose an image', transient_for: dlg, modal: true});
+            const filter = new Gtk.FileFilter({name: 'Images'});
+            filter.add_pixbuf_formats();
+            fc.add_filter(filter);
+            fc.connect('response', (_f, response) => {
+                if (response === Gtk.ResponseType.ACCEPT) {
+                    image = fc.get_file().get_path();
+                    showImage();
+                    sync();
+                }
+                dlg._chooser = null;
+            });
+            dlg._chooser = fc; // keep it alive until it answers
+            fc.show();
+        });
+        clear.connect('clicked', () => {
+            image = '';
+            showImage();
+            sync();
+        });
+        imageRow.append(preview);
+        imageRow.append(pick);
+        imageRow.append(clear);
+        imageRow.append(new Gtk.Label({label: 'Or your own image (PNG, SVG, JPG)', css_classes: ['dim-label']}));
+        box.append(imageRow);
+        showImage();
+
+        box.append(heading('Text to copy'));
+        const view = new Gtk.TextView({wrap_mode: Gtk.WrapMode.CHAR, monospace: true,
+            top_margin: 6, bottom_margin: 6, left_margin: 6, right_margin: 6});
+        view.buffer.text = item?.text ?? '';
+        const scroll = new Gtk.ScrolledWindow({child: view, min_content_height: 110, has_frame: true});
+        box.append(scroll);
+        dlg.set_child(box);
+
+        const text = () => view.buffer.text;
+        const sync = () => (save.sensitive = (!!icon.text.trim() || !!image) && !!text());
+        icon.connect('changed', sync);
+        view.buffer.connect('changed', sync);
+        sync();
+        // Bring Settings back to the front, or it can end up behind other windows.
+        dlg.connect('close-request', () => {
+            window.present();
+            return false;
+        });
+        cancel.connect('clicked', () => dlg.close());
+        save.connect('clicked', () => {
+            let stored = image;
+            if (image && image !== item?.image) {
+                try {
+                    GLib.mkdir_with_parents(QUICK_ICONS, 0o700);
+                    const ext = image.match(/\.\w+$/)?.[0] ?? '';
+                    stored = GLib.build_filenamev([QUICK_ICONS, `${GLib.uuid_string_random()}${ext}`]);
+                    Gio.File.new_for_path(image).copy(Gio.File.new_for_path(stored), Gio.FileCopyFlags.NONE, null, null);
+                } catch (e) {
+                    window.add_toast(new Adw.Toast({title: `Image not saved: ${e.message}`}));
+                    return;
+                }
+            }
+            onSave({icon: icon.text.trim(), image: stored || undefined, text: text()});
+            dlg.close();
+        });
+        dlg.present();
     }
 
     // OCR needs tesseract and zbar. Turning the switch on installs them

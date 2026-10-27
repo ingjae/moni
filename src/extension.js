@@ -20,6 +20,7 @@ import * as C from './collectors.js';
 import * as Cap from './capture.js';
 import * as Clip from './clipboard.js';
 import * as Up from './updater.js';
+import * as Quick from './quick.js';
 
 const HISTORY = 180;
 const PANEL_GRAPH_H = 18;
@@ -1006,6 +1007,22 @@ export default class MoniExtension extends Extension {
         this._addIndicator();
         this._clipId = this._settings.connect('changed::show-clipboard', () => this._syncClipboard());
         this._syncClipboard();
+        this._quickIds = ['changed::show-quick', 'changed::quick-items'].map(sig =>
+            this._settings.connect(sig, () => this._syncQuick()));
+        this._syncQuick();
+    }
+
+    // Quick copy buttons: on when enabled and at least one item is set.
+    // Their copies stay out of the clipboard history (tokens, passwords).
+    _syncQuick() {
+        const on = this._settings.get_boolean('show-quick') && Quick.readItems(this._settings).length > 0;
+        if (on && !this._quick) {
+            this._quick = new Quick.QuickIndicator(this._settings, text => this._clip?.ignore(text));
+            Quick.addToPanel(this.uuid, this._quick);
+        } else if (!on && this._quick) {
+            this._quick.destroy();
+            this._quick = null;
+        }
     }
 
     // Clipboard history is its own panel icon + shortcut, on only when enabled.
@@ -1028,6 +1045,9 @@ export default class MoniExtension extends Extension {
             Main.wm.removeKeybinding(key);
         this._settings.disconnect(this._posId);
         this._settings.disconnect(this._clipId);
+        this._quickIds.forEach(id => this._settings.disconnect(id));
+        this._quick?.destroy();
+        this._quick = null;
         if (this._clip) {
             Main.wm.removeKeybinding('clipboard-shortcut');
             this._clip.destroy();
