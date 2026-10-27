@@ -245,8 +245,8 @@ gnome-extensions enable moni@ingjae.github.io
 Prefer a zip? Grab one from [Releases](https://github.com/ingjae/moni/releases):
 
 ```bash
-gnome-extensions install --force moni@ingjae.github.io.gnome45-48.v0.0.7.zip   # Ubuntu 24.04
-gnome-extensions install --force moni@ingjae.github.io.gnome42-44.v0.0.7.zip   # Ubuntu 22.04
+gnome-extensions install --force moni@ingjae.github.io.gnome45-48.v0.0.8.zip   # Ubuntu 24.04
+gnome-extensions install --force moni@ingjae.github.io.gnome42-44.v0.0.8.zip   # Ubuntu 22.04
 ```
 
 **Updates.** Once a day Moni asks GitHub for the latest release. A notification offers **Update**, which

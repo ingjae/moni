@@ -213,6 +213,7 @@ export default class MoniPreferences extends ExtensionPreferences {
         const about = group('About', 'Bugs, questions and ideas: please open a GitHub issue.');
         const link = (title, subtitle, label, uri) =>
             row(about, title, subtitle, new Gtk.LinkButton({label, uri}));
+        row(about, 'Version', '', new Gtk.Label({label: this.metadata['version-name'], selectable: true}));
         link('GitHub', 'Source code, releases and docs', 'github.com/ingjae/moni', REPO);
         link('Report an issue', 'Bugs, questions, feature requests', 'Open issue', `${REPO}/issues/new`);
     }
