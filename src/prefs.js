@@ -239,13 +239,19 @@ export default class MoniPreferences extends ExtensionPreferences {
                 }
             });
         });
+        // The prefs process gets metadata over D-Bus, which drops arrays such
+        // as shell-version, so read it from the installed metadata.json.
+        const shellMajor = () => {
+            const [, bytes] = GLib.file_get_contents(`${this.path}/metadata.json`);
+            return String(JSON.parse(new TextDecoder().decode(bytes))['shell-version'][0]);
+        };
         let found = null;
         button.connect('clicked', async () => {
             button.sensitive = false;
             try {
                 if (!found) {
                     r.subtitle = 'Checking…';
-                    const out = await helper(['latest', version, String(this.metadata['shell-version'][0])]);
+                    const out = await helper(['latest', version, shellMajor()]);
                     found = out ? JSON.parse(out) : null;
                     r.subtitle = found ? `Moni ${found.version} is available · installed: ${version}` : `Up to date (${version})`;
                     button.label = found ? 'Update' : 'Check now';

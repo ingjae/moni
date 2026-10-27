@@ -318,7 +318,12 @@ class MoniIndicator extends PanelMenu.Button {
             c.box.visible = visible;
             if (!visible)
                 return;
-            c.value.text = text;
+            if (c.value.text !== text) {
+                c.value.text = text;
+                // Repaint the whole chip: on some setups redrawing only the new
+                // glyphs left digits of the old value on screen (#3).
+                c.box.queue_redraw();
+            }
             c.graph?.queue_repaint();
         };
         set('cpu', pct(st.cpu?.total));
@@ -509,7 +514,7 @@ class MoniIndicator extends PanelMenu.Button {
         });
         this.menu.addMenuItem(this._updateItem);
         this.onUpdateChanged();
-        this.menu.addAction('Settings', () => this._ext.openPreferences());
+        this.menu.addAction('Settings', () => openSettings(this._ext));
     }
 
     // Shown only while a release is waiting or needs a restart to apply.
@@ -968,6 +973,19 @@ class MoniIndicator extends PanelMenu.Button {
         super.destroy();
     }
 });
+
+// GNOME refuses to open Settings while its window exists, even when that
+// window is hidden behind others; bring the open one to the front instead.
+function openSettings(ext) {
+    const raise = () => global.get_window_actors().map(a => a.meta_window)
+        .find(w => w.get_wm_class() === 'org.gnome.Shell.Extensions' && w.get_title() === ext.metadata.name)
+        ?.activate(global.get_current_time());
+    try {
+        ext.openPreferences()?.catch?.(raise);
+    } catch (e) {
+        raise();
+    }
+}
 
 const SHORTCUTS = {'screenshot-shortcut': false, 'record-shortcut': true};
 

@@ -39,7 +39,7 @@ vm.runInContext(captureSource + '\nglobalThis.CaptureClass = Capture;', ctx);
     assert.equal(chips.ros.box.visible, false);
     assert.equal(chips.ip.box.visible, true, 'small chip fits after oversized chip');
     const update = method('_updatePanel', '_queueFit');
-    const state = {_fallback: {visible: false, add_style_class_name() {}, remove_style_class_name() {}}, _state: {ros: {bags: [{eta: null, rate: 1}, {eta: 900}, {eta: 120}]}}, _ext: {capture: {}}, _chips: {rec: {box: {add_style_class_name() {}, remove_style_class_name() {}, has_style_class_name() {return false;}}, value: {}}}, _fitPanel() {}};
+    const state = {_fallback: {visible: false, add_style_class_name() {}, remove_style_class_name() {}}, _state: {ros: {bags: [{eta: null, rate: 1}, {eta: 900}, {eta: 120}]}}, _ext: {capture: {}}, _chips: {rec: {box: {queue_redraw() {}, add_style_class_name() {}, remove_style_class_name() {}, has_style_class_name() {return false;}}, value: {}}}, _fitPanel() {}};
     vm.runInNewContext(`const obj = {${update}}; obj._updatePanel.call(state);`, {state, pct: () => '', fmtBytes: String, fmtDuration: s => `${s}s`, fmtCount: String, dockerTrouble: () => false});
     assert.equal(state._chips.rec.value.text, '120s', 'most urgent bag wins');
     state._chips = {};
