@@ -44,7 +44,14 @@ class MoniQuickIndicator extends PanelMenu.Button {
         this._box = new St.BoxLayout({style_class: 'moni-quick'});
         this.add_child(this._box);
         this._id = settings.connect('changed::quick-items', () => this._rebuild());
+        this._styleId = settings.connect('changed::style', () => this._syncStyle());
+        this._syncStyle();
         this._rebuild();
+    }
+
+    // Monochrome: the ✓ flash is gray like the rest of Moni.
+    _syncStyle() {
+        this._box[this._settings.get_string('style') === 'mono' ? 'add_style_class_name' : 'remove_style_class_name']('moni-style-mono');
     }
 
     _rebuild() {
@@ -52,10 +59,11 @@ class MoniQuickIndicator extends PanelMenu.Button {
         for (const item of readItems(this._settings)) {
             const image = item.image && GLib.file_test(item.image, GLib.FileTest.EXISTS);
             const face = image
-                ? new St.Icon({gicon: new Gio.FileIcon({file: Gio.File.new_for_path(item.image)}), style_class: 'system-status-icon'})
+                ? new St.Icon({gicon: new Gio.FileIcon({file: Gio.File.new_for_path(item.image)}), icon_size: 16})
                 : new St.Label({text: item.icon?.trim() || '?', y_align: Clutter.ActorAlign.CENTER});
-            const check = new St.Label({text: '✓', y_align: Clutter.ActorAlign.CENTER, visible: false});
-            const content = new St.BoxLayout();
+            // ✓ is drawn over the icon, so the button keeps its width.
+            const check = new St.Label({text: '✓', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER, visible: false});
+            const content = new St.Widget({layout_manager: new Clutter.BinLayout()});
             content.add_child(face);
             content.add_child(check);
             // No key focus on click: the paste must reach the window that has it.
@@ -103,11 +111,11 @@ class MoniQuickIndicator extends PanelMenu.Button {
 
     // The button shows ✓ for a moment.
     _flash(button, face, check) {
-        face.visible = false;
+        face.opacity = 0;
         check.visible = true;
         button.add_style_class_name('moni-quick-done');
         this._later(700, () => {
-            face.visible = true;
+            face.opacity = 255;
             check.visible = false;
             button.remove_style_class_name('moni-quick-done');
         });
@@ -117,6 +125,7 @@ class MoniQuickIndicator extends PanelMenu.Button {
         this._destroyed = true;
         this._vk = null;
         this._settings.disconnect(this._id);
+        this._settings.disconnect(this._styleId);
         super.destroy();
     }
 });

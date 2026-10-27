@@ -148,14 +148,14 @@ export default class MoniPreferences extends ExtensionPreferences {
         spin(clip, 'clipboard-size', 'Recent items', 'Kept until logout', 10, 200, 10);
 
         const quick = group('Quick copy',
-            'Buttons in the top bar that copy a fixed text in one click — a token, an address, a command. ' +
-            'Copies stay out of the clipboard history. Texts are stored in plain text in dconf and included in Export.');
+            'One-click buttons in the top bar for a token, an address or a command. ' +
+            'Not kept in clipboard history; stored as plain text in dconf and included in Export.');
         toggle(quick, 'show-quick', 'Quick copy buttons', 'Shown while at least one item exists');
         const ACTIONS = ['both', 'copy', 'paste'];
         const action = Gtk.DropDown.new_from_strings(['Copy and paste', 'Copy only', 'Paste only']);
         action.selected = Math.max(0, ACTIONS.indexOf(settings.get_string('quick-action')));
         action.connect('notify::selected', () => settings.set_string('quick-action', ACTIONS[action.selected]));
-        row(quick, 'On click', 'Paste types it where the cursor is; Paste only keeps your clipboard as it was', action);
+        row(quick, 'On click', 'Paste types it at the cursor; Paste only restores your clipboard', action);
         this._quickItems(window, settings, quick);
 
         const general = group('General');
@@ -301,12 +301,13 @@ export default class MoniPreferences extends ExtensionPreferences {
         const render = () => {
             rows.forEach(r => g.remove(r));
             rows = load().map((item, i) => {
-                const r = new Adw.ActionRow({
-                    title: GLib.markup_escape_text(String(item.icon || (item.image ? 'Image' : '')), -1),
-                    subtitle: `•••• ${String(item.text ?? '').length} characters`,
-                });
-                if (item.image)
-                    r.add_prefix(new Gtk.Image({file: item.image, pixel_size: 24}));
+                // The icon as the top bar shows it, then the text, masked.
+                const r = new Adw.ActionRow({title: `•••• ${String(item.text ?? '').length} characters`});
+                const tile = item.image
+                    ? new Gtk.Image({file: item.image, pixel_size: 20})
+                    : new Gtk.Label({label: String(item.icon ?? ''), css_classes: ['heading']});
+                tile.width_request = 36;
+                r.add_prefix(tile);
                 r.add_suffix(iconButton('document-edit-symbolic', 'Edit', () => this._quickDialog(window, item, edited => {
                     const items = load();
                     if (items[i]?.image !== edited.image)
@@ -332,7 +333,7 @@ export default class MoniPreferences extends ExtensionPreferences {
 
     // Icon: up to a few characters typed in, or an emoji from the picker.
     _quickDialog(window, item, onSave) {
-        const dlg = new Gtk.Window({transient_for: window, modal: true, title: item ? 'Edit quick copy' : 'New quick copy', default_width: 420});
+        const dlg = new Gtk.Window({transient_for: window, modal: true, title: item ? 'Edit quick copy' : 'New quick copy', default_width: 460});
         const header = new Gtk.HeaderBar({show_title_buttons: false});
         const cancel = new Gtk.Button({label: 'Cancel'});
         const save = new Gtk.Button({label: 'Save'});
