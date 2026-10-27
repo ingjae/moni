@@ -227,6 +227,13 @@ GNOME 기본 <kbd>Print</kbd> 도구는 건드리지 않습니다.
 
 자동 붙여넣기 없이 클립보드에 다시 복사만 하고 싶다면 설정에서 *Paste on pick*을 끄세요.
 
+### ⚡ 빠른 복사
+
+GitHub 토큰, 로봇 IP, 긴 명령어처럼 자주 복사하는 텍스트를 상단바 버튼 한 번으로 복사합니다.
+설정 → Quick copy → *Add item*에서 아이콘(`GH` 같은 짧은 글자 또는 이모지 선택)과 복사할 텍스트를 정하세요.
+누르면 복사되고 버튼이 잠깐 ✓로 바뀝니다. 텍스트 자체는 패널에 보이지 않고, 클립보드 기록에도 남지 않습니다.
+텍스트는 ★ 즐겨찾기처럼 dconf에 평문으로 저장되며 *Export*에도 포함됩니다.
+
 ## 설치
 
 ```bash
@@ -360,6 +367,7 @@ gsettings --schemadir ~/.local/share/gnome-shell/extensions/moni@ingjae.github.i
 | `record-cursor` | `true` | 녹화에 마우스 포인터 표시 |
 | `ocr` | `false` | OCR과 QR 코드(설정에서 켜면 tesseract와 zbar 설치) |
 | `update-check` / `update-auto` | `true` / `false` | 하루 1회 릴리즈 확인 / 묻지 않고 설치 |
+| `show-quick` / `quick-items` | `true` / `[]` | 빠른 복사 버튼 / 항목 JSON (`[{"icon": "GH", "text": "…"}]`) |
 | `show-clipboard` / `clipboard-shortcut` | `true` / `<Super><Shift>v` | 클립보드 기록 아이콘 + 단축키 |
 | `clipboard-paste` | `true` | 고르면 포커스된 창에 붙여넣기 |
 | `clipboard-size` | `50` | 보관할 최근 항목 수(메모리에만) |
@@ -412,6 +420,7 @@ src/
   extension.js    패널 항목, 대시보드, 자동 맞춤, 단축키
   capture.js      영역 선택, 캡처, 핀, 녹화
   clipboard.js    클립보드 기록, 즐겨찾기, 붙여넣기
+  quick.js        상단바 빠른 복사 버튼
   editor.js       Moni Shot 주석 편집기 (GTK 4, 별도 프로세스)
   updater.js      하루 1회 릴리즈 확인, 업데이트 알림, 재시작
   helper.js       스크롤 이어 붙이기, OCR, 릴리즈 다운로드 + SHA-256 확인 (별도 프로세스, 편집기도 import)

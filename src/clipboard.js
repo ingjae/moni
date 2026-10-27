@@ -76,10 +76,19 @@ class MoniClipboardIndicator extends PanelMenu.Button {
         return this._settings.get_strv('clipboard-favorites');
     }
 
+    // The next clipboard change with this text is not recorded.
+    ignore(text) {
+        this._ignore = text;
+    }
+
     _readClipboard() {
         if (this._clipboard.get_mimetypes(St.ClipboardType.CLIPBOARD).includes(SECRET_HINT))
             return;
         this._clipboard.get_text(St.ClipboardType.CLIPBOARD, (_c, text) => {
+            if (text && text === this._ignore) {
+                this._ignore = null;
+                return;
+            }
             if (!text || !text.trim() || text.length > MAX_TEXT || this._destroyed)
                 return;
             this._history = [text, ...this._history.filter(t => t !== text)]

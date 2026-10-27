@@ -143,6 +143,12 @@ export default class MoniPreferences extends ExtensionPreferences {
         toggle(clip, 'clipboard-paste', 'Paste on pick', 'Off: only copies the item back to the clipboard');
         spin(clip, 'clipboard-size', 'Recent items', 'Kept until logout', 10, 200, 10);
 
+        const quick = group('Quick copy',
+            'Buttons in the top bar that copy a fixed text in one click — a token, an address, a command. ' +
+            'Copies stay out of the clipboard history. Texts are stored in plain text in dconf and included in Export.');
+        toggle(quick, 'show-quick', 'Quick copy buttons', 'Shown while at least one item exists');
+        this._quickItems(window, settings, quick);
+
         const general = group('General');
         spin(general, 'update-interval', 'Update interval', 'Milliseconds', 500, 10000, 250);
         spin(general, 'graph-width', 'Graph width', 'Pixels per panel graph', 20, 120, 4);
@@ -263,6 +269,94 @@ export default class MoniPreferences extends ExtensionPreferences {
                 button.sensitive = true;
             }
         });
+    }
+
+    // Item rows with Edit / Delete, then an Add row; edits open a small dialog.
+    _quickItems(window, settings, g) {
+        const load = () => {
+            try {
+                const items = JSON.parse(settings.get_string('quick-items'));
+                return Array.isArray(items) ? items : [];
+            } catch (e) {
+                return [];
+            }
+        };
+        const store = items => settings.set_string('quick-items', JSON.stringify(items));
+        const iconButton = (icon, tooltip, onClick) => {
+            const b = new Gtk.Button({icon_name: icon, tooltip_text: tooltip, valign: Gtk.Align.CENTER});
+            b.add_css_class('flat');
+            b.connect('clicked', onClick);
+            return b;
+        };
+        let rows = [];
+        const render = () => {
+            rows.forEach(r => g.remove(r));
+            rows = load().map((item, i) => {
+                const r = new Adw.ActionRow({
+                    title: GLib.markup_escape_text(String(item.icon ?? ''), -1),
+                    subtitle: `•••• ${String(item.text ?? '').length} characters`,
+                });
+                r.add_suffix(iconButton('document-edit-symbolic', 'Edit', () => this._quickDialog(window, item, edited => {
+                    const items = load();
+                    items[i] = edited;
+                    store(items);
+                })));
+                r.add_suffix(iconButton('user-trash-symbolic', 'Delete', () => store(load().filter((_x, k) => k !== i))));
+                g.add(r);
+                return r;
+            });
+            const add = new Adw.ActionRow({title: 'Add item'});
+            add.add_suffix(iconButton('list-add-symbolic', 'Add', () => this._quickDialog(window, null, item => store([...load(), item]))));
+            g.add(add);
+            rows.push(add);
+        };
+        settings.connect('changed::quick-items', render);
+        render();
+    }
+
+    // Icon: up to a few characters typed in, or an emoji from the picker.
+    _quickDialog(window, item, onSave) {
+        const dlg = new Gtk.Window({transient_for: window, modal: true, title: item ? 'Edit quick copy' : 'New quick copy', default_width: 420});
+        const header = new Gtk.HeaderBar({show_title_buttons: false});
+        const cancel = new Gtk.Button({label: 'Cancel'});
+        const save = new Gtk.Button({label: 'Save'});
+        save.add_css_class('suggested-action');
+        header.pack_start(cancel);
+        header.pack_end(save);
+        dlg.set_titlebar(header);
+
+        const box = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 8,
+            margin_top: 18, margin_bottom: 18, margin_start: 18, margin_end: 18});
+        const heading = text => new Gtk.Label({label: text, xalign: 0, css_classes: ['heading']});
+        box.append(heading('Icon'));
+        const iconRow = new Gtk.Box({spacing: 6});
+        const icon = new Gtk.Entry({max_length: 8, width_chars: 10, placeholder_text: 'GH or 🔑', text: item?.icon ?? ''});
+        const chooser = new Gtk.EmojiChooser();
+        chooser.connect('emoji-picked', (_c, emoji) => (icon.text = emoji));
+        iconRow.append(icon);
+        iconRow.append(new Gtk.MenuButton({label: '😀', tooltip_text: 'Pick an emoji', popover: chooser}));
+        iconRow.append(new Gtk.Label({label: 'Short text (e.g. GH, IP) or an emoji', css_classes: ['dim-label']}));
+        box.append(iconRow);
+
+        box.append(heading('Text to copy'));
+        const view = new Gtk.TextView({wrap_mode: Gtk.WrapMode.CHAR, monospace: true,
+            top_margin: 6, bottom_margin: 6, left_margin: 6, right_margin: 6});
+        view.buffer.text = item?.text ?? '';
+        const scroll = new Gtk.ScrolledWindow({child: view, min_content_height: 110, has_frame: true});
+        box.append(scroll);
+        dlg.set_child(box);
+
+        const text = () => view.buffer.text;
+        const sync = () => (save.sensitive = !!icon.text.trim() && !!text());
+        icon.connect('changed', sync);
+        view.buffer.connect('changed', sync);
+        sync();
+        cancel.connect('clicked', () => dlg.close());
+        save.connect('clicked', () => {
+            onSave({icon: icon.text.trim(), text: text()});
+            dlg.close();
+        });
+        dlg.present();
     }
 
     // OCR needs tesseract and zbar. Turning the switch on installs them
