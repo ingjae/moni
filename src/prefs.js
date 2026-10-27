@@ -36,6 +36,7 @@ function importSettings(settings, text) {
         const valid = {
             b: typeof value === 'boolean',
             i: Number.isInteger(value),
+            x: Number.isInteger(value),
             s: typeof value === 'string',
             as: Array.isArray(value) && value.every(v => typeof v === 'string'),
         }[type];
@@ -160,6 +161,13 @@ export default class MoniPreferences extends ExtensionPreferences {
             style.selected = Math.max(0, STYLES.indexOf(settings.get_string('style')));
         });
         row(general, 'Style', 'Apple system colors, or grays only', style);
+
+        const updates = group('Updates', 'New releases come from github.com/ingjae/moni and are checked against their SHA-256 digest.');
+        toggle(updates, 'update-check', 'Check for updates', 'Once a day; a notification offers the update');
+        const auto = new Gtk.Switch();
+        settings.bind('update-auto', auto, 'active', Gio.SettingsBindFlags.DEFAULT);
+        settings.bind('update-check', auto, 'sensitive', Gio.SettingsBindFlags.GET);
+        row(updates, 'Install automatically', 'Applies after a Shell restart or the next login', auto);
 
         const backup = group('Backup', 'Move your Moni setup — toggles, shortcuts and ★ clipboard favorites — to another machine.');
         const choose = (title, action, onFile) => {

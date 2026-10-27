@@ -19,6 +19,7 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as C from './collectors.js';
 import * as Cap from './capture.js';
 import * as Clip from './clipboard.js';
+import * as Up from './updater.js';
 
 const HISTORY = 180;
 const PANEL_GRAPH_H = 18;
@@ -498,7 +499,29 @@ class MoniIndicator extends PanelMenu.Button {
         cards.disk.detail.add_style_class_name('moni-mono');
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        this._updateItem = new PopupMenu.PopupImageMenuItem('', 'software-update-available-symbolic');
+        this._updateItem.connect('activate', () => {
+            const u = this._ext.updater;
+            if (u.installed)
+                Up.restartShell();
+            else
+                u.install();
+        });
+        this.menu.addMenuItem(this._updateItem);
+        this.onUpdateChanged();
         this.menu.addAction('Settings', () => this._ext.openPreferences());
+    }
+
+    // Shown only while a release is waiting or needs a restart to apply.
+    onUpdateChanged() {
+        const u = this._ext.updater, item = this._updateItem;
+        item.visible = !!u?.available;
+        if (!u?.available)
+            return;
+        const wayland = Meta.is_wayland_compositor();
+        item.label.text = !u.installed ? `Update to Moni ${u.available.version}`
+            : wayland ? `Moni ${u.available.version}: log out to apply` : `Moni ${u.available.version}: restart to apply`;
+        item.reactive = !(u.installed && wayland);
     }
 
     _accelLabel(key) {
@@ -952,6 +975,7 @@ export default class MoniExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
         this.capture = new Cap.Capture(this.path, this._settings, () => this._indicator?.onRecordingChanged());
+        this.updater = new Up.Updater(this.path, this.metadata, this._settings, () => this._indicator?.onUpdateChanged());
         for (const [key, record] of Object.entries(SHORTCUTS)) {
             Main.wm.addKeybinding(key, this._settings, Meta.KeyBindingFlags.IGNORE_AUTOREPEAT,
                 Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW,
@@ -994,6 +1018,8 @@ export default class MoniExtension extends Extension {
         this._removeIndicator();
         this.capture.destroy();
         this.capture = null;
+        this.updater.destroy();
+        this.updater = null;
         this._settings = null;
     }
 

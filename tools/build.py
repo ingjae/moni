@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SRC, BUILD, DIST = ROOT / 'src', ROOT / 'build', ROOT / 'dist'
 TARGETS = {'esm': ['45', '46', '47', '48'], 'legacy': ['42', '43', '44']}
-JS = ['extension.js', 'prefs.js', 'collectors.js', 'capture.js', 'clipboard.js']
+JS = ['extension.js', 'prefs.js', 'collectors.js', 'capture.js', 'clipboard.js', 'updater.js']
 # Runs as its own `gjs -m` process on every GNOME version: copied untouched.
 STANDALONE = ['editor.js', 'helper.js']
 
