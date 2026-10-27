@@ -19,8 +19,10 @@ import PangoCairo from 'gi://PangoCairo';
 import System from 'system';
 
 const TOOLS = [
+    {id: 'move', key: 'v', label: '✥', name: 'Move'},
     {id: 'arrow', key: 'a', label: '↗', name: 'Arrow'},
     {id: 'rect', key: 'r', label: '▭', name: 'Rectangle'},
+    {id: 'pen', key: 'p', label: '✎', name: 'Pen'},
     {id: 'highlight', key: 'h', label: '▮', name: 'Highlighter'},
     {id: 'text', key: 't', label: 'T', name: 'Text'},
     {id: 'blur', key: 'b', label: '▦', name: 'Pixelate'},
@@ -30,6 +32,13 @@ const TOOLS = [
 ];
 const CLICK_TOOLS = new Set(['text', 'step', 'picker']);
 const COLORS = ['#ff3b30', '#ff9500', '#ffcc00', '#34c759', '#0a84ff', '#bf5af2', '#ffffff', '#000000'];
+
+// Distance from point p to segment ab, in image pixels.
+function segDist([px, py], [ax, ay], [bx, by]) {
+    const dx = bx - ax, dy = by - ay;
+    const t = dx || dy ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy))) : 0;
+    return Math.hypot(px - ax - t * dx, py - ay - t * dy);
+}
 
 const rgb = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
 const stamp = () => GLib.DateTime.new_now_local().format('%Y-%m-%d_%H-%M-%S');
@@ -66,7 +75,9 @@ class Editor {
         this.channels = this.pixbuf.get_n_channels();
         this.lw = Math.max(3, Math.round(Math.max(this.W, this.H) / 350));
         this.items = [];
+        this.history = [];
         this.draft = null;
+        this.moving = null;
         this.tool = 'arrow';
         this.color = COLORS[0];
         this.view = {s: 1, ox: 0, oy: 0};
@@ -167,25 +178,52 @@ class Editor {
         let p0 = null;
         drag.connect('drag-begin', (_g, x, y) => {
             p0 = this.toImage(x, y);
-            if (!CLICK_TOOLS.has(this.tool))
+            if (this.tool === 'move') {
+                const i = this.hitTest(p0);
+                if (i >= 0)
+                    this.moving = {i, orig: this.items[i], before: this.items.slice()};
+            } else if (this.tool === 'pen') {
+                this.draft = {type: 'pen', color: this.color, pts: [this.clamp(p0)]};
+            } else if (!CLICK_TOOLS.has(this.tool)) {
                 this.draft = this.makeItem(p0, p0);
+            }
         });
         drag.connect('drag-update', (_g, dx, dy) => {
-            if (!this.draft)
-                return;
             const [sx, sy] = drag.get_start_point().slice(1);
-            this.draft = this.makeItem(p0, this.toImage(sx + dx, sy + dy));
+            const p = this.toImage(sx + dx, sy + dy);
+            if (this.moving) {
+                this.items[this.moving.i] = this.shift(this.moving.orig, p[0] - p0[0], p[1] - p0[1]);
+            } else if (this.draft?.type === 'pen') {
+                const q = this.clamp(p), last = this.draft.pts.at(-1);
+                if (Math.hypot(q[0] - last[0], q[1] - last[1]) >= 1)
+                    this.draft.pts.push(q);
+            } else if (this.draft) {
+                this.draft = this.makeItem(p0, p);
+            } else {
+                return;
+            }
             this.area.queue_draw();
         });
         drag.connect('drag-end', (_g, dx, dy) => {
-            if (CLICK_TOOLS.has(this.tool)) {
+            if (this.moving) {
+                const it = this.items[this.moving.i];
+                if (it !== this.moving.orig) {
+                    if (it.type === 'blur')
+                        it.pixbuf = this.pixelate(it) ?? it.pixbuf;
+                    this.history.push(this.moving.before);
+                }
+                this.moving = null;
+            } else if (CLICK_TOOLS.has(this.tool)) {
                 if (Math.hypot(dx, dy) < 4)
                     this.click(p0, drag.get_start_point().slice(1));
+            } else if (this.draft?.type === 'pen') {
+                if (this.draft.pts.length >= 2)
+                    this.addItem(this.draft);
             } else if (this.draft && Math.hypot(dx, dy) >= 3) {
                 if (this.draft.type === 'blur')
                     this.draft.pixbuf = this.pixelate(this.draft);
                 if (this.draft.pixbuf !== null)
-                    this.items.push(this.draft);
+                    this.addItem(this.draft);
             }
             this.draft = null;
             this.area.queue_draw();
@@ -193,7 +231,12 @@ class Editor {
         this.area.add_controller(drag);
 
         const motion = new Gtk.EventControllerMotion();
-        motion.connect('motion', (_m, x, y) => this.updateStatus(this.toImage(x, y)));
+        motion.connect('motion', (_m, x, y) => {
+            const p = this.toImage(x, y);
+            this.updateStatus(p);
+            if (this.tool === 'move' && !this.moving)
+                this.area.set_cursor(Gdk.Cursor.new_from_name(this.hitTest(p) >= 0 ? 'move' : 'default', null));
+        });
         this.area.add_controller(motion);
 
         const keys = new Gtk.EventControllerKey();
@@ -226,7 +269,8 @@ class Editor {
     setTool(id) {
         this.tool = id;
         this.updateStatus(null);
-        this.area.set_cursor(Gdk.Cursor.new_from_name(id === 'text' ? 'text' : 'crosshair', null));
+        const cursor = {text: 'text', move: 'default'}[id] ?? 'crosshair';
+        this.area.set_cursor(Gdk.Cursor.new_from_name(cursor, null));
     }
 
     // Annotations live on the image: points on the dark margin are pulled in.
@@ -244,7 +288,7 @@ class Editor {
             p = this.clamp(p);
         if (this.tool === 'step') {
             const n = this.items.filter(i => i.type === 'step').length + 1;
-            this.items.push({type: 'step', color: this.color, x1: p[0], y1: p[1], n});
+            this.addItem({type: 'step', color: this.color, x1: p[0], y1: p[1], n});
         } else if (this.tool === 'picker') {
             const hex = this.pixelHex(p);
             if (hex) {
@@ -264,7 +308,7 @@ class Editor {
         pop.set_pointing_to(rect);
         entry.connect('activate', () => {
             if (entry.text.trim())
-                this.items.push({type: 'text', color: this.color, x1: p[0], y1: p[1], text: entry.text});
+                this.addItem({type: 'text', color: this.color, x1: p[0], y1: p[1], text: entry.text});
             pop.popdown();
             this.area.queue_draw();
         });
@@ -276,9 +320,68 @@ class Editor {
         entry.grab_focus();
     }
 
+    addItem(it) {
+        this.history.push(this.items.slice());
+        this.items.push(it);
+    }
+
     undo() {
-        this.items.pop();
+        if (this.history.length)
+            this.items = this.history.pop();
         this.area.queue_draw();
+    }
+
+    // Topmost annotation under p, or -1. The grab margin never drops below
+    // ~6 screen pixels, so thin lines stay easy to pick on a zoomed-out view.
+    hitTest(p) {
+        const tol = Math.max(this.lw * 2, 6 / this.view.s);
+        for (let i = this.items.length - 1; i >= 0; i--) {
+            const it = this.items[i];
+            const a = [it.x1, it.y1], b = [it.x2, it.y2];
+            const x = Math.min(it.x1, it.x2), y = Math.min(it.y1, it.y2);
+            const w = Math.abs(it.x2 - it.x1), h = Math.abs(it.y2 - it.y1);
+            const inBox = (bx, by, bw, bh) => p[0] >= bx - tol && p[0] <= bx + bw + tol && p[1] >= by - tol && p[1] <= by + bh + tol;
+            let hit = false;
+            switch (it.type) {
+            case 'arrow':
+            case 'ruler':
+                hit = segDist(p, a, b) <= tol;
+                break;
+            case 'pen':
+                hit = it.pts.some((q, j) => segDist(p, it.pts[Math.max(0, j - 1)], q) <= tol);
+                break;
+            case 'rect':
+                hit = inBox(x, y, w, h) && !(p[0] > x + tol && p[0] < x + w - tol && p[1] > y + tol && p[1] < y + h - tol);
+                break;
+            case 'highlight':
+            case 'blur':
+                hit = inBox(x, y, w, h);
+                break;
+            case 'step':
+                hit = Math.hypot(p[0] - it.x1, p[1] - it.y1) <= this.lw * 4 + tol;
+                break;
+            case 'text':
+                hit = it.size && inBox(it.x1, it.y1, ...it.size);
+                break;
+            }
+            if (hit)
+                return i;
+        }
+        return -1;
+    }
+
+    // A moved copy, so undo can restore the original object.
+    shift(it, dx, dy) {
+        const out = {...it};
+        for (const [kx, ky] of [['x1', 'y1'], ['x2', 'y2'], ['px', 'py']]) {
+            if (it[kx] !== undefined) {
+                out[kx] = it[kx] + dx;
+                out[ky] = it[ky] + dy;
+            }
+        }
+        if (it.pts)
+            out.pts = it.pts.map(([x, y]) => [x + dx, y + dy]);
+        return out;
     }
 
     pixelHex([x, y]) {
@@ -371,6 +474,14 @@ class Editor {
             cr.rectangle(x, y, w, h);
             cr.stroke();
             break;
+        case 'pen':
+            cr.setSourceRGBA(r, g, b, 1);
+            cr.setLineWidth(lw);
+            cr.moveTo(...it.pts[0]);
+            for (const q of it.pts.slice(1))
+                cr.lineTo(...q);
+            cr.stroke();
+            break;
         case 'highlight':
             cr.setSourceRGBA(r, g, b, 0.35);
             cr.rectangle(x, y, w, h);
@@ -393,6 +504,7 @@ class Editor {
             font.set_absolute_size(fs * Pango.SCALE);
             layout.set_font_description(font);
             layout.set_text(it.text, -1);
+            it.size = layout.get_pixel_size();
             cr.moveTo(it.x1, it.y1);
             PangoCairo.layout_path(cr, layout);
             const light = r * 0.3 + g * 0.59 + b * 0.11 > 0.6;

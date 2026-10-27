@@ -65,8 +65,8 @@ carrier (bus-off). An idle bus stays out of your way and only appears in the dro
 <td valign="top">
 
 ### 📸 Shottr-style capture on Linux
-<kbd>Super</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>: drag an area and an editor opens with arrows, boxes,
-highlighter, text, pixelate, numbered steps, a **pixel ruler** and a color picker. Copy it, save it,
+<kbd>Super</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>: drag an area and an editor opens with arrows, boxes, a freehand pen,
+highlighter, text, pixelate, numbered steps, a **pixel ruler** and a color picker. Anything you draw can be moved afterwards. Copy it, save it,
 or **pin** it above all your windows as a floating reference.
 
 </td>
@@ -192,6 +192,8 @@ not <kbd>Ctrl</kbd>, so they don't steal *Save As* from your editor, browser or 
 | <kbd>N</kbd> | ① Numbered steps | | <kbd>Esc</kbd> | Close |
 | <kbd>M</kbd> | ⟷ Ruler (px, dx × dy) | | | |
 | <kbd>I</kbd> | ◎ Color picker (copies hex) | | | |
+| <kbd>P</kbd> | ✎ Pen (freehand) | | | |
+| <kbd>V</kbd> | ✥ Move: drag any annotation (undo puts it back) | | | |
 
 The status bar always shows the cursor position in image pixels and the color under it.
 

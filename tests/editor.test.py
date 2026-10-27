@@ -48,6 +48,7 @@ app.connect('activate', () => {
             }
             editor.items.push({type: 'text', color: '#ffffff', x1: 20, y1: 20, text: 'Moni 테스트'});
             editor.items.push({type: 'step', color: '#ff3b30', x1: 230, y1: 180, n: 1});
+            editor.items.push({type: 'pen', color: '#34c759', pts: [[240, 30], [260, 60], [290, 40], [300, 90]]});
             const items = editor.items;
             for (const item of items) {
                 editor.items = [item];
@@ -60,6 +61,24 @@ app.connect('activate', () => {
             const exported = GdkPixbuf.Pixbuf.new_from_file(output);
             check(exported.get_width() === 320 && exported.get_height() === 240, 'export keeps source resolution');
             check(sum(baseline) !== sum(output), 'annotations change exported pixels');
+            editor.items = [];
+            editor.history = [];
+            editor.addItem({type: 'step', color: '#ff3b30', x1: 100, y1: 100, n: 1});
+            editor.addItem({type: 'pen', color: '#34c759', pts: [[10, 200], [60, 210], [110, 200]]});
+            editor.addItem({type: 'rect', color: '#0a84ff', x1: 150, y1: 20, x2: 300, y2: 120});
+            check(editor.hitTest([60, 210]) === 1, 'hit test finds the pen stroke');
+            check(editor.hitTest([102, 98]) === 0, 'hit test finds the step badge');
+            check(editor.hitTest([150, 70]) === 2, 'hit test finds the rectangle edge');
+            check(editor.hitTest([225, 70]) === -1, 'rectangle interior is not a grab target');
+            const pen = editor.items[1];
+            editor.history.push(editor.items.slice());
+            editor.items[1] = editor.shift(pen, 40, -50);
+            check(editor.items[1].pts[0][0] === 50 && editor.items[1].pts[0][1] === 150, 'move shifts every pen point');
+            check(editor.hitTest([60, 210]) === -1 && editor.hitTest([100, 160]) === 1, 'moved stroke is grabbed at its new place');
+            const moved = editor.shift(editor.items[2], 10, 10);
+            check(moved.x1 === 160 && moved.y2 === 130 && moved.n === undefined, 'move shifts both rectangle corners');
+            editor.undo();
+            check(editor.items[1] === pen, 'undo reverts a move');
             const count = editor.items.length;
             editor.undo();
             check(editor.items.length === count - 1, 'undo removes one annotation');
@@ -68,7 +87,7 @@ app.connect('activate', () => {
             editor.items = [];
             editor.exportTo(`${dir}/undone.png`);
             check(sum(baseline) === sum(`${dir}/undone.png`), 'undo state restores original rendered image');
-            print(`ok    GTK editor: all 8 tools, Unicode text, export, undo, boundaries; scale=${editor.area.get_scale_factor()}; window=${editor.win.get_width()}x${editor.win.get_height()}`);
+            print(`ok    GTK editor: all 10 tools, move, Unicode text, export, undo, boundaries; scale=${editor.area.get_scale_factor()}; window=${editor.win.get_width()}x${editor.win.get_height()}`);
         } catch (e) {
             failed = true;
             printerr(`${e}\n${e.stack}`);
