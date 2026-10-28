@@ -23,7 +23,7 @@ export const cliPath = O.cliPath;
 const LABEL = {waiting: 'Needs you', working: 'Working', done: 'Done', idle: 'Idle'};
 // Fallback polling; Orca's hook status file triggers a read right away.
 const BUSY_POLL = 3, IDLE_POLL = 10, MIN_GAP = 1500, NUDGE_DELAY = 250;
-const HOVER_DELAY = 350, CARD_WIDTH = 320;
+const HOVER_DELAY = 350, CARD_WIDTH = 320, MAX_BUBBLES = 3;
 
 const orcaWindow = () => global.get_window_actors().map(a => a.meta_window).find(w => w.get_wm_class() === 'orca');
 const plain = t => String(t ?? '').replace(/[`*#>|]/g, '').replace(/\s+/g, ' ').trim();
@@ -237,7 +237,7 @@ class MoniOrcaBar extends PanelMenu.Button {
         if (this._hover?.session.id === s.id)
             this._hideCard();
         const actor = this._card(s, kind);
-        this._bubbles.set(s.id, {actor, session: s, kind});
+        this._bubbles.set(s.id, {actor, session: s, kind, at: Date.now()});
         this._layoutBubbles();
     }
 
@@ -263,15 +263,61 @@ class MoniOrcaBar extends PanelMenu.Button {
     }
 
     // Under its chip (or the list button); later bubbles stack below.
+    // Questions first, then the newest; past MAX_BUBBLES the rest wait
+    // behind a "+N more · Dismiss all" pill.
     _layoutBubbles() {
-        let offset = 0, placed = true;
-        for (const b of this._bubbles.values()) {
-            const anchor = this._chips?.get(b.session.id) ?? this._more ?? this;
-            placed = this._place(b.actor, anchor, offset) && placed;
+        const order = [...this._bubbles.values()].sort((a, b) =>
+            (b.kind === 'waiting') - (a.kind === 'waiting') || b.at - a.at);
+        if (order.length <= MAX_BUBBLES)
+            this._expanded = false;
+        const shown = this._expanded ? order : order.slice(0, MAX_BUBBLES);
+        let offset = 0, placed = true, last = this;
+        for (const b of order) {
+            b.actor.visible = shown.includes(b);
+            if (!b.actor.visible)
+                continue;
+            last = this._chips?.get(b.session.id) ?? this._more ?? this;
+            placed = this._place(b.actor, last, offset) && placed;
             offset += b.actor.height + 8;
         }
+        this._layoutPill(order.length - shown.length, order.length > MAX_BUBBLES, last, offset);
         if (!placed)
             this._retryLayout(() => this._layoutBubbles());
+    }
+
+    _layoutPill(hidden, show, anchor, offset) {
+        if (!show) {
+            this._pill?.destroy();
+            this._pill = null;
+            return;
+        }
+        if (!this._pill) {
+            this._pill = new St.BoxLayout({style_class: 'moni-orca-pill', reactive: true});
+            const button = (style, fn) => {
+                const b = new St.Button({style_class: `moni-orca-pill-button ${style}`, can_focus: false});
+                b.connect('clicked', fn);
+                this._pill.add_child(b);
+                return b;
+            };
+            this._pillMore = button('', () => {
+                this._expanded = !this._expanded;
+                this._layoutBubbles();
+            });
+            button('moni-orca-pill-dismiss', () => this._dismissAll()).label = 'Dismiss all';
+        }
+        this._pillMore.label = hidden > 0 ? `+${hidden} more` : 'Show less';
+        if (!this._pill.get_parent())
+            Main.layoutManager.addTopChrome(this._pill);
+        const [x] = anchor.get_transformed_position();
+        if (Number.isFinite(x))
+            this._pill.set_position(Math.round(x), Math.round(Main.panel.height + 6 + offset));
+    }
+
+    // Finished sessions only: a question still needs an answer.
+    _dismissAll() {
+        for (const [id, b] of [...this._bubbles])
+            if (b.kind === 'done')
+                this._closeBubble(id);
     }
 
     // A chip rebuilt in this poll has no position until the next layout.
@@ -495,6 +541,7 @@ class MoniOrcaBar extends PanelMenu.Button {
         this._hideCard();
         for (const id of [...this._bubbles.keys()])
             this._closeBubble(id);
+        this._pill?.destroy();
         this._ids.forEach(id => this._settings.disconnect(id));
         super.destroy();
     }

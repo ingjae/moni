@@ -96,3 +96,10 @@
 }
 .moni-orca-entry:focus { border-color: #0a84ff; background-color: rgba(255, 255, 255, 0.1); box-shadow: none; }
 .moni-orca-entry .hint-text { color: rgba(235, 235, 245, 0.45); }
+.moni-orca-pill {
+    background-color: rgba(30, 30, 32, 0.97); border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 99px; padding: 3px; spacing: 2px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.moni-orca-pill-button { font-size: 9pt; color: #f2f2f7; padding: 4px 12px; border-radius: 99px; }
+.moni-orca-pill-button:hover { background-color: rgba(255, 255, 255, 0.12); }
+.moni-orca-pill-dismiss { color: rgba(235, 235, 245, 0.6); }
