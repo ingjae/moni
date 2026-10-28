@@ -61,14 +61,21 @@ export default class MoniPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         const settings = this.getSettings();
         window._settings = settings;
-        const page = new Adw.PreferencesPage({title: 'Moni', icon_name: 'utilities-system-monitor-symbolic'});
-        window.add(page);
+        // Our own search covers the sub pages too.
+        window.search_enabled = false;
+        const home = new Adw.PreferencesPage({title: 'Moni', icon_name: 'utilities-system-monitor-symbolic'});
+        window.add(home);
 
         // Adw parses titles as Pango markup: '&' and '<Super>' must be escaped.
         const esc = t => GLib.markup_escape_text(t, -1);
+        // Every row and group title, for search: [text, category].
+        const index = [];
+        let page = home, category = null;
         const group = (title, description = '') => {
             const g = new Adw.PreferencesGroup({title: esc(title), description: esc(description)});
             page.add(g);
+            if (category && title)
+                index.push({title, subtitle: description, category});
             return g;
         };
         const row = (g, title, subtitle, widget) => {
@@ -77,6 +84,8 @@ export default class MoniPreferences extends ExtensionPreferences {
             r.add_suffix(widget);
             r.activatable_widget = widget;
             g.add(r);
+            if (category)
+                index.push({title, subtitle, category});
             return r;
         };
         const toggle = (g, key, title, subtitle = '') => {
@@ -89,38 +98,17 @@ export default class MoniPreferences extends ExtensionPreferences {
             settings.bind(key, sb, 'value', Gio.SettingsBindFlags.DEFAULT);
             row(g, title, subtitle, sb);
         };
-
-        const panel = group('Top bar', 'What to draw in the panel');
-        toggle(panel, 'show-cpu', 'CPU');
-        toggle(panel, 'show-ram', 'Memory');
-        toggle(panel, 'show-gpu', 'GPU', 'NVIDIA, AMD or Jetson. Hidden when none is found');
-        toggle(panel, 'show-net', 'Network throughput');
-        toggle(panel, 'show-disk', 'Disk usage', 'Root filesystem');
-        toggle(panel, 'show-ip', 'IP address', 'Address of the default-route interface');
-        toggle(panel, 'show-text', 'Numbers next to graphs');
-
-        const robo = group('Robotics', 'Badges only appear while there is something to show');
-        toggle(robo, 'show-ros', 'ROS 2 node radar', 'Finds processes with librcl.so loaded — never joins DDS');
-        toggle(robo, 'show-rosbag', 'rosbag recording', 'BAG badge with write rate and time until the disk is full');
-        toggle(robo, 'show-can', 'CAN bus', 'can*/vcan* state, frame rate and error counters');
-        toggle(robo, 'show-devices', 'Sensor devices', 'ttyUSB/ttyACM serial, cameras, gamepads');
-        toggle(robo, 'notify-devices', 'Notify on plug / unplug');
-        toggle(robo, 'show-pm2', 'PM2 processes', 'Apps in ~/.pm2: status, CPU, memory, restarts — no pm2 CLI polling');
-        toggle(robo, 'notify-pm2', 'Notify on PM2 crash', 'When an app exits non-zero or ends up errored');
-        toggle(robo, 'show-docker', 'Docker containers', 'Running containers, CPU, memory, health — via the Engine socket, no docker CLI');
-        toggle(robo, 'notify-docker', 'Notify on container trouble', 'Non-zero exit, restart loop or unhealthy');
-
-        const net = group('Internet check');
-        toggle(net, 'internet-probe', 'Measure latency', 'TCP connect to the host below every 10 s');
-        const entry = new Gtk.Entry({width_chars: 16});
-        settings.bind('probe-host', entry, 'text', Gio.SettingsBindFlags.DEFAULT);
-        row(net, 'Probe host', 'Port 443', entry);
-
-        const capture = group('Screenshot & recording',
-            'Drag an area (click = whole screen) → annotate, copy, save or pin. While selecting: Space window, ' +
-            'Enter last area, S scrolling capture, 3 / 5 timer. Recordings go to ~/Videos/Screencasts. ' +
-            'Accelerator syntax, e.g. <Super><Shift>s. Empty disables. Print still opens GNOME\'s own tool.');
-        const accel = (key, title, g = capture) => {
+        const choice = (g, key, title, subtitle, values, labels) => {
+            const dd = Gtk.DropDown.new_from_strings(labels);
+            const sync = () => {
+                dd.selected = Math.max(0, values.indexOf(settings.get_string(key)));
+            };
+            sync();
+            dd.connect('notify::selected', () => settings.set_string(key, values[dd.selected]));
+            settings.connect(`changed::${key}`, sync);
+            row(g, title, subtitle, dd);
+        };
+        const accel = (g, key, title) => {
             const e = new Gtk.Entry({width_chars: 18, text: settings.get_strv(key)[0] ?? ''});
             settings.connect(`changed::${key}`, () => {
                 const v = settings.get_strv(key)[0] ?? '';
@@ -136,67 +124,184 @@ export default class MoniPreferences extends ExtensionPreferences {
             });
             row(g, title, '', e);
         };
-        accel('screenshot-shortcut', 'Screenshot');
-        accel('record-shortcut', 'Start / stop recording');
-        toggle(capture, 'record-cursor', 'Show pointer in recordings');
-        this._ocrRow(window, settings, capture, row);
 
-        const clip = group('Clipboard history',
-            'Super+Shift+V or the 📋 icon: type to search, Enter or click to paste, ★ to keep an item. ' +
-            'Recent items live in memory only; ★ favorites are saved. Password-manager copies are skipped.');
-        toggle(clip, 'show-clipboard', 'Clipboard history');
-        accel('clipboard-shortcut', 'Open history', clip);
-        toggle(clip, 'clipboard-paste', 'Paste on pick', 'Off: only copies the item back to the clipboard');
-        spin(clip, 'clipboard-size', 'Recent items', 'Kept until logout', 10, 200, 10);
+        // ── Home: search, updates, then one row per settings page ─────────
+        const search = new Gtk.SearchEntry({placeholder_text: 'Search settings', hexpand: true});
+        const searchGroup = new Adw.PreferencesGroup();
+        searchGroup.add(search);
+        home.add(searchGroup);
+        const results = new Adw.PreferencesGroup({title: 'Results', visible: false});
+        home.add(results);
 
-        const quick = group('Quick copy',
-            'One-click buttons in the top bar for a token, an address or a command. ' +
-            'Not kept in clipboard history; stored as plain text in dconf and included in Export.');
-        toggle(quick, 'show-quick', 'Quick copy buttons', 'Shown while at least one item exists');
-        const ACTIONS = ['both', 'copy', 'paste'];
-        const action = Gtk.DropDown.new_from_strings(['Copy and paste', 'Copy only', 'Paste only']);
-        action.selected = Math.max(0, ACTIONS.indexOf(settings.get_string('quick-action')));
-        action.connect('notify::selected', () => settings.set_string('quick-action', ACTIONS[action.selected]));
-        row(quick, 'On click', 'Paste types it at the cursor; Paste only restores your clipboard', action);
-        this._quickItems(window, settings, quick);
-
-        const orca = group('Orca sessions',
-            'Agent sessions from the Orca app on the left of the top bar. Hover for the last reply, click to jump there. ' +
-            'Pick sessions below to always show them in your order; with none picked, the most recent appear.');
-        toggle(orca, 'show-orca', 'Orca sessions', 'Shown while Orca is open');
-        spin(orca, 'orca-count', 'Recent sessions', 'How many to show when none are picked', 1, 10, 1);
-        toggle(orca, 'orca-bubbles', 'Bubbles', 'When a session finishes or waits on you. Follows Do Not Disturb');
-        toggle(orca, 'orca-answer', 'Answer from the bubble', 'Claude Code questions and permission prompts get buttons that type the choice');
-        this._orcaSessions(settings, group('Shown sessions'));
-
-        const general = group('General');
-        spin(general, 'update-interval', 'Update interval', 'Milliseconds', 500, 10000, 250);
-        spin(general, 'graph-width', 'Graph width', 'Pixels per panel graph', 20, 120, 4);
-        const dd = Gtk.DropDown.new_from_strings(POSITIONS);
-        dd.selected = Math.max(0, POSITIONS.indexOf(settings.get_string('panel-position')));
-        dd.connect('notify::selected', () => settings.set_string('panel-position', POSITIONS[dd.selected]));
-        settings.connect('changed::panel-position', () => {
-            dd.selected = Math.max(0, POSITIONS.indexOf(settings.get_string('panel-position')));
-        });
-        row(general, 'Panel position', '', dd);
-        const STYLES = ['color', 'mono'];
-        const style = Gtk.DropDown.new_from_strings(['Color', 'Monochrome']);
-        style.selected = Math.max(0, STYLES.indexOf(settings.get_string('style')));
-        style.connect('notify::selected', () => settings.set_string('style', STYLES[style.selected]));
-        settings.connect('changed::style', () => {
-            style.selected = Math.max(0, STYLES.indexOf(settings.get_string('style')));
-        });
-        row(general, 'Style', 'Apple system colors, or grays only', style);
-
-        const updates = group('Updates', 'New releases come from github.com/ingjae/moni and are checked against their SHA-256 digest.');
-        toggle(updates, 'update-check', 'Check for updates', 'Once a day; a notification offers the update');
-        const auto = new Gtk.Switch();
-        settings.bind('update-auto', auto, 'active', Gio.SettingsBindFlags.DEFAULT);
-        settings.bind('update-check', auto, 'sensitive', Gio.SettingsBindFlags.GET);
-        row(updates, 'Install automatically', 'Applies after a Shell restart or the next login', auto);
+        const updates = new Adw.PreferencesGroup({title: 'Updates',
+            description: 'New releases come from github.com/ingjae/moni and are checked against their SHA-256 digest.'});
+        home.add(updates);
         this._checkRow(window, updates, row);
+        const updateToggles = () => {
+            toggle(updates, 'update-check', 'Check for updates', 'Once a day; a notification offers the update');
+            const auto = new Gtk.Switch();
+            settings.bind('update-auto', auto, 'active', Gio.SettingsBindFlags.DEFAULT);
+            settings.bind('update-check', auto, 'sensitive', Gio.SettingsBindFlags.GET);
+            row(updates, 'Install automatically', 'Applies after a Shell restart or the next login', auto);
+        };
+        const pagesGroup = new Adw.PreferencesGroup({title: 'Settings'});
+        home.add(pagesGroup);
 
-        const backup = group('Backup', 'Move your Moni setup — toggles, shortcuts and ★ clipboard favorites — to another machine.');
+        // A sub page: header with a back button over its own preferences page.
+        const pages = new Map();
+        const open = name => {
+            window.present_subpage(pages.get(name));
+        };
+        const subpage = (name, icon, summary, build) => {
+            const box = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL});
+            const header = new Adw.HeaderBar({title_widget: new Adw.WindowTitle({title: name})});
+            const back = new Gtk.Button({icon_name: 'go-previous-symbolic', tooltip_text: 'Back'});
+            back.connect('clicked', () => window.close_subpage());
+            header.pack_start(back);
+            box.append(header);
+            page = new Adw.PreferencesPage({vexpand: true});
+            box.append(page);
+            category = name;
+            index.push({title: name, subtitle: summary, category});
+            build();
+            page = home;
+            category = null;
+            pages.set(name, box);
+
+            const r = new Adw.ActionRow({title: esc(name), subtitle: esc(summary), activatable: true});
+            r.add_prefix(new Gtk.Image({icon_name: icon}));
+            r.add_suffix(new Gtk.Image({icon_name: 'go-next-symbolic'}));
+            r.connect('activated', () => open(name));
+            pagesGroup.add(r);
+        };
+
+        subpage('Top bar', 'utilities-system-monitor-symbolic', 'CPU, memory, GPU, network, disk, IP, latency', () => {
+            const panel = group('Graphs', 'What to draw in the panel');
+            toggle(panel, 'show-cpu', 'CPU');
+            toggle(panel, 'show-ram', 'Memory');
+            toggle(panel, 'show-gpu', 'GPU', 'NVIDIA, AMD or Jetson. Hidden when none is found');
+            toggle(panel, 'show-net', 'Network throughput');
+            toggle(panel, 'show-disk', 'Disk usage', 'Root filesystem');
+            toggle(panel, 'show-ip', 'IP address', 'Address of the default-route interface');
+            toggle(panel, 'show-text', 'Numbers next to graphs');
+            const net = group('Internet check');
+            toggle(net, 'internet-probe', 'Measure latency', 'TCP connect to the host below every 10 s');
+            const entry = new Gtk.Entry({width_chars: 16});
+            settings.bind('probe-host', entry, 'text', Gio.SettingsBindFlags.DEFAULT);
+            row(net, 'Probe host', 'Port 443', entry);
+        });
+
+        subpage('Robotics', 'applications-engineering-symbolic', 'ROS 2, rosbag, CAN, sensors, PM2, Docker', () => {
+            const robo = group('Badges', 'Badges only appear while there is something to show');
+            toggle(robo, 'show-ros', 'ROS 2 node radar', 'Finds processes with librcl.so loaded — never joins DDS');
+            toggle(robo, 'show-rosbag', 'rosbag recording', 'BAG badge with write rate and time until the disk is full');
+            toggle(robo, 'show-can', 'CAN bus', 'can*/vcan* state, frame rate and error counters');
+            toggle(robo, 'show-devices', 'Sensor devices', 'ttyUSB/ttyACM serial, cameras, gamepads');
+            toggle(robo, 'show-pm2', 'PM2 processes', 'Apps in ~/.pm2: status, CPU, memory, restarts — no pm2 CLI polling');
+            toggle(robo, 'show-docker', 'Docker containers', 'Running containers, CPU, memory, health — via the Engine socket, no docker CLI');
+            const notify = group('Notifications');
+            toggle(notify, 'notify-devices', 'Sensor plugged or unplugged');
+            toggle(notify, 'notify-pm2', 'PM2 crash', 'When an app exits non-zero or ends up errored');
+            toggle(notify, 'notify-docker', 'Container trouble', 'Non-zero exit, restart loop or unhealthy');
+        });
+
+        subpage('Orca sessions', 'utilities-terminal-symbolic', 'Agent sessions, bubbles, which sessions to show', () => {
+            const orca = group('Orca sessions',
+                'Agent sessions from the Orca app on the left of the top bar. Hover for the last reply, click to jump there.');
+            toggle(orca, 'show-orca', 'Orca sessions', 'Shown while Orca is open');
+            toggle(orca, 'orca-bubbles', 'Bubbles', 'When a session finishes or waits on you. Follows Do Not Disturb');
+            toggle(orca, 'orca-answer', 'Answer from the bubble', 'Claude Code questions and permission prompts get buttons that type the choice');
+            spin(orca, 'orca-count', 'Recent sessions', 'How many to show when none are picked', 1, 10, 1);
+            this._orcaSessions(settings, group('Shown sessions',
+                'Ticked sessions always show, in this order. With none ticked, the most recent appear.'));
+        });
+
+        subpage('Screenshot & recording', 'camera-photo-symbolic', 'Shortcuts, pointer, text recognition', () => {
+            const capture = group('Screenshot & recording',
+                'Drag an area (click = whole screen) → annotate, copy, save or pin. While selecting: Space window, ' +
+                'Enter last area, S scrolling capture, 3 / 5 timer. Recordings go to ~/Videos/Screencasts. ' +
+                'Accelerator syntax, e.g. <Super><Shift>s. Empty disables. Print still opens GNOME\'s own tool.');
+            accel(capture, 'screenshot-shortcut', 'Screenshot shortcut');
+            accel(capture, 'record-shortcut', 'Recording shortcut');
+            toggle(capture, 'record-cursor', 'Show pointer in recordings');
+            this._ocrRow(window, settings, capture, row);
+        });
+
+        subpage('Clipboard history', 'edit-paste-symbolic', 'Shortcut, paste on pick, history size', () => {
+            const clip = group('Clipboard history',
+                'Super+Shift+V or the 📋 icon: type to search, Enter or click to paste, ★ to keep an item. ' +
+                'Recent items live in memory only; ★ favorites are saved. Password-manager copies are skipped.');
+            toggle(clip, 'show-clipboard', 'Clipboard history');
+            accel(clip, 'clipboard-shortcut', 'Open history');
+            toggle(clip, 'clipboard-paste', 'Paste on pick', 'Off: only copies the item back to the clipboard');
+            spin(clip, 'clipboard-size', 'Recent items', 'Kept until logout', 10, 200, 10);
+        });
+
+        subpage('Quick copy', 'edit-copy-symbolic', 'One-click buttons for tokens, addresses, commands', () => {
+            const quick = group('Quick copy',
+                'One-click buttons in the top bar for a token, an address or a command. ' +
+                'Not kept in clipboard history; stored as plain text in dconf and included in Export.');
+            toggle(quick, 'show-quick', 'Quick copy buttons', 'Shown while at least one item exists');
+            choice(quick, 'quick-action', 'On click', 'Paste types it at the cursor; Paste only restores your clipboard',
+                ['both', 'copy', 'paste'], ['Copy and paste', 'Copy only', 'Paste only']);
+            this._quickItems(window, settings, group('Items'));
+        });
+
+        subpage('Appearance', 'preferences-desktop-appearance-symbolic', 'Style, position, graph width, refresh rate', () => {
+            const look = group('Appearance');
+            choice(look, 'style', 'Style', 'Apple system colors, or grays only', ['color', 'mono'], ['Color', 'Monochrome']);
+            choice(look, 'panel-position', 'Panel position', '', POSITIONS, POSITIONS);
+            spin(look, 'graph-width', 'Graph width', 'Pixels per panel graph', 20, 120, 4);
+            spin(look, 'update-interval', 'Update interval', 'Milliseconds', 500, 10000, 250);
+        });
+
+        subpage('Backup', 'document-save-symbolic', 'Export or import every setting', () => {
+            const backup = group('Backup', 'Move your Moni setup — toggles, shortcuts and ★ clipboard favorites — to another machine.');
+            this._backupRows(window, settings, backup, row);
+        });
+
+        subpage('About', 'help-about-symbolic', 'Version, source code, issues', () => {
+            const about = group('About', 'Bugs, questions and ideas: please open a GitHub issue.');
+            const link = (title, subtitle, label, uri) =>
+                row(about, title, subtitle, new Gtk.LinkButton({label, uri}));
+            row(about, 'Version', '', new Gtk.Label({label: this.metadata['version-name'], selectable: true}));
+            link('GitHub', 'Source code, releases and docs', 'github.com/ingjae/moni', REPO);
+            link('Report an issue', 'Bugs, questions, feature requests', 'Open issue', `${REPO}/issues/new`);
+        });
+
+        // Updates sit on the home page, so they are searchable from there.
+        category = 'Updates';
+        updateToggles();
+        category = null;
+
+        // Matches replace the home page; a result opens its page.
+        let shown = [];
+        search.connect('search-changed', () => {
+            const q = search.text.trim().toLowerCase();
+            shown.forEach(r => results.remove(r));
+            shown = [];
+            const hits = q ? index.filter(i => `${i.title} ${i.subtitle} ${i.category}`.toLowerCase().includes(q)) : [];
+            for (const hit of hits.slice(0, 30)) {
+                const r = new Adw.ActionRow({title: esc(hit.title),
+                    subtitle: esc(hit.category === hit.title ? 'Page' : hit.category), activatable: true});
+                r.add_suffix(new Gtk.Image({icon_name: 'go-next-symbolic'}));
+                // Updates live on the home page: clearing the search shows them.
+                r.connect('activated', () => (hit.category === 'Updates' ? search.set_text('') : open(hit.category)));
+                results.add(r);
+                shown.push(r);
+            }
+            if (q && !hits.length) {
+                const r = new Adw.ActionRow({title: 'No matching settings'});
+                results.add(r);
+                shown.push(r);
+            }
+            results.visible = !!q;
+            pagesGroup.visible = !q;
+            updates.visible = !q;
+        });
+    }
+
+    _backupRows(window, settings, backup, row) {
         const choose = (title, action, onFile) => {
             const dlg = new Gtk.FileChooserNative({title, action, transient_for: window, modal: true});
             const filter = new Gtk.FileFilter({name: 'Moni settings (JSON)'});
@@ -236,13 +341,6 @@ export default class MoniPreferences extends ExtensionPreferences {
                     title: `Imported ${applied} settings${skipped ? ` · ${skipped} skipped` : ''}`,
                 }));
             })));
-
-        const about = group('About', 'Bugs, questions and ideas: please open a GitHub issue.');
-        const link = (title, subtitle, label, uri) =>
-            row(about, title, subtitle, new Gtk.LinkButton({label, uri}));
-        row(about, 'Version', '', new Gtk.Label({label: this.metadata['version-name'], selectable: true}));
-        link('GitHub', 'Source code, releases and docs', 'github.com/ingjae/moni', REPO);
-        link('Report an issue', 'Bugs, questions, feature requests', 'Open issue', `${REPO}/issues/new`);
     }
 
     // Check now, then Update when a release is waiting. Runs helper.js, the
@@ -250,7 +348,7 @@ export default class MoniPreferences extends ExtensionPreferences {
     _checkRow(window, g, row) {
         const version = this.metadata['version-name'];
         const button = new Gtk.Button({label: 'Check now'});
-        const r = row(g, 'Check for updates now', `Installed: ${version}`, button);
+        const r = row(g, `Moni ${version}`, 'Installed version', button);
         const helper = args => new Promise((resolve, reject) => {
             const proc = Gio.Subprocess.new(['gjs', '-m', `${this.path}/helper.js`, ...args],
                 Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);

@@ -40,7 +40,7 @@ function dot(state, unread) {
     const d = new St.Widget({style_class: `moni-orca-dot moni-orca-${state}${unread && state === 'done' ? ' moni-orca-unread' : ''}`,
         y_align: Clutter.ActorAlign.CENTER});
     if (state === 'working')
-        d.ease({opacity: 110, duration: 900, mode: Clutter.AnimationMode.EASE_IN_OUT_SINE, repeatCount: -1, autoReverse: true});
+        d.ease({opacity: 200, duration: 1100, mode: Clutter.AnimationMode.EASE_IN_OUT_SINE, repeatCount: -1, autoReverse: true});
     return d;
 }
 

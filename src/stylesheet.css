@@ -52,15 +52,15 @@
 .moni-orca-chip-box { spacing: 6px; }
 .moni-orca-name { font-size: 9.5pt; font-weight: 500; }
 .moni-orca-more-icon { icon-size: 12px; }
-.moni-orca-dot { width: 7px; height: 7px; border-radius: 4px; }
-.moni-orca-working { background-color: #30d158; }
-.moni-orca-waiting { background-color: #ffd60a; }
+.moni-orca-dot { width: 8px; height: 8px; border-radius: 4px; }
+.moni-orca-working { background-color: #2ee65c; box-shadow: 0 0 5px rgba(46, 230, 92, 0.75); }
+.moni-orca-waiting { background-color: #ffcc00; box-shadow: 0 0 5px rgba(255, 204, 0, 0.6); }
 .moni-orca-done { background-color: rgba(142, 142, 147, 0.75); }
-.moni-orca-done.moni-orca-unread { background-color: #0a84ff; }
-.moni-orca-idle { border: 1px solid rgba(142, 142, 147, 0.8); width: 5px; height: 5px; }
-.moni-style-mono .moni-orca-working { background-color: #f2f2f7; }
-.moni-style-mono .moni-orca-waiting { background-color: transparent; border: 2px solid #f2f2f7; width: 3px; height: 3px; }
-.moni-style-mono .moni-orca-done.moni-orca-unread { background-color: rgba(242, 242, 247, 0.7); }
+.moni-orca-done.moni-orca-unread { background-color: #1a8cff; box-shadow: 0 0 5px rgba(26, 140, 255, 0.6); }
+.moni-orca-idle { border: 1px solid rgba(142, 142, 147, 0.8); width: 6px; height: 6px; }
+.moni-style-mono .moni-orca-working { background-color: #f2f2f7; box-shadow: none; }
+.moni-style-mono .moni-orca-waiting { background-color: transparent; border: 2px solid #f2f2f7; width: 4px; height: 4px; box-shadow: none; }
+.moni-style-mono .moni-orca-done.moni-orca-unread { background-color: rgba(242, 242, 247, 0.7); box-shadow: none; }
 
 .moni-orca-card {
     background-color: rgba(30, 30, 32, 0.97); color: #f2f2f7;
