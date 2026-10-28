@@ -17,6 +17,11 @@ export function cliPath() {
     return GLib.find_program_in_path('orca-ide') ?? (GLib.file_test(local, GLib.FileTest.IS_EXECUTABLE) ? local : null);
 }
 
+// Orca rewrites last-status.json here on every agent hook event.
+export function hookDir() {
+    return GLib.build_filenamev([GLib.get_user_config_dir(), 'orca', 'agent-hooks']);
+}
+
 // argv → parsed `result`; rejects on a failed run or `ok: false`.
 export function run(cli, args, cancellable = null) {
     return new Promise((resolve, reject) => {

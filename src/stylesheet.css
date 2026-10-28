@@ -87,3 +87,5 @@
 .moni-orca-item { spacing: 8px; min-width: 300px; }
 .moni-orca-item-name { font-weight: 500; }
 .moni-orca-item-branch, .moni-orca-item-time { font-size: 9pt; color: rgba(128, 128, 128, 1); font-feature-settings: "tnum"; }
+.moni-orca-choices { spacing: 4px; padding-top: 8px; }
+.moni-orca-choice { padding: 6px 10px; }

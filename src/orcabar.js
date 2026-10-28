@@ -20,8 +20,9 @@ import * as O from './orca.js';
 export const cliPath = O.cliPath;
 
 const LABEL = {waiting: 'Needs you', working: 'Working', done: 'Done', idle: 'Idle'};
-const BUSY_POLL = 3, IDLE_POLL = 10;
-const HOVER_DELAY = 350, BUBBLE_MS = 6000;
+// Fallback polling; Orca's hook status file triggers a read right away.
+const BUSY_POLL = 3, IDLE_POLL = 10, MIN_GAP = 1500, NUDGE_DELAY = 250;
+const HOVER_DELAY = 350, BUBBLE_MS = 6000, CARD_WIDTH = 320;
 
 const orcaWindow = () => global.get_window_actors().map(a => a.meta_window).find(w => w.get_wm_class() === 'orca');
 const plain = t => String(t ?? '').replace(/[`*#>|]/g, '').replace(/\s+/g, ' ').trim();
@@ -66,6 +67,18 @@ class MoniOrcaBar extends PanelMenu.Button {
         this._ids = ['changed::orca-sessions', 'changed::orca-count'].map(sig => settings.connect(sig, () => this._render(true)));
         this._ids.push(settings.connect('changed::style', () => this._render(true)));
         this.menu.connect('open-state-changed', (_m, open) => open && this._hideCard());
+        // Orca rewrites this file on every agent hook event (state changes
+        // included), so a change means "read now" instead of up to 3 s later.
+        try {
+            this._monitor = Gio.File.new_for_path(O.hookDir()).monitor_directory(Gio.FileMonitorFlags.WATCH_MOVES, null);
+            this._monitor.connect('changed', (_m, file, other) => {
+                if ([file, other].some(f => f?.get_basename() === 'last-status.json'))
+                    this._pollSoon();
+            });
+        } catch (e) {
+            this._monitor = null;
+        }
+        this._lastPoll = 0;
         this._poll();
     }
 
@@ -77,12 +90,18 @@ class MoniOrcaBar extends PanelMenu.Button {
         if (this._cli && orcaWindow()) {
             try {
                 sessions = O.parseSessions(await O.run(this._cli, ['worktree', 'ps'], this._cancel));
+                this._failures = 0;
             } catch (e) {
                 if (this._destroyed)
                     return;
+                // One failed read must not wipe the bar and its bubbles.
+                this._failures = (this._failures ?? 0) + 1;
+                if (this._failures < 3)
+                    sessions = this._sessions;
             }
         }
         this._polling = false;
+        this._lastPoll = Date.now();
         if (this._destroyed)
             return;
         const events = O.transitions(this._states, sessions);
@@ -92,26 +111,33 @@ class MoniOrcaBar extends PanelMenu.Button {
         events.forEach(e => this._bubble(e.session, e.kind));
         this._dropStaleBubbles();
         const busy = sessions.some(s => s.state === 'working' || s.state === 'waiting');
-        this._schedule(this._soon ? 800 : (busy ? BUSY_POLL : IDLE_POLL) * 1000);
-        this._soon = false;
+        this._schedule((busy ? BUSY_POLL : IDLE_POLL) * 1000);
+        if (this._soon) {
+            this._soon = false;
+            this._pollSoon();
+        }
     }
 
     _schedule(ms) {
+        if (this._timer)
+            GLib.source_remove(this._timer);
+        this._dueAt = Date.now() + ms;
         this._timer = GLib.timeout_add(GLib.PRIORITY_LOW, ms, () => {
             this._poll();
             return GLib.SOURCE_REMOVE;
         });
     }
 
-    // Right after an answer, without starting a second polling loop.
+    // Something changed (an answer, an Orca hook event): read again soon,
+    // but never twice within MIN_GAP and without a second polling loop.
     _pollSoon() {
         if (this._polling) {
             this._soon = true;
             return;
         }
-        if (this._timer)
-            GLib.source_remove(this._timer);
-        this._schedule(800);
+        const ms = Math.max(NUDGE_DELAY, MIN_GAP - (Date.now() - this._lastPoll));
+        if (!this._timer || this._dueAt > Date.now() + ms)
+            this._schedule(ms);
     }
 
     // ── chips ─────────────────────────────────────────────────────────────
@@ -192,7 +218,8 @@ class MoniOrcaBar extends PanelMenu.Button {
         this._hideCard();
         const actor = this._card(s, null);
         actor.connect('notify::hover', () => !actor.hover && !chip.hover && this._hideCard());
-        this._place(actor, chip, 0);
+        if (!this._place(actor, chip, 0))
+            this._retryLayout(() => this._hover?.actor === actor && this._place(actor, chip, 0));
         this._hover = {actor, session: s};
     }
 
@@ -250,25 +277,45 @@ class MoniOrcaBar extends PanelMenu.Button {
 
     // Under its chip (or the list button); later bubbles stack below.
     _layoutBubbles() {
-        let offset = 0;
+        let offset = 0, placed = true;
         for (const b of this._bubbles.values()) {
             const anchor = this._chips?.get(b.session.id) ?? this._more ?? this;
-            this._place(b.actor, anchor, offset);
-            offset += b.actor.get_preferred_height(-1)[1] + 8;
+            placed = this._place(b.actor, anchor, offset) && placed;
+            offset += b.actor.height + 8;
         }
+        if (!placed)
+            this._retryLayout(() => this._layoutBubbles());
+    }
+
+    // A chip rebuilt in this poll has no position until the next layout.
+    _retryLayout(fn) {
+        if (this._layoutTimer)
+            return;
+        this._layoutTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
+            this._layoutTimer = 0;
+            fn();
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     _place(actor, anchor, offset) {
         if (!actor.get_parent())
             Main.layoutManager.addTopChrome(actor);
+        // A NaN position (anchor not laid out yet) leaves the card
+        // unallocated for good, so wait for a real one.
         const [x] = anchor.get_transformed_position();
+        if (!Number.isFinite(x)) {
+            actor.opacity = 0;
+            return false;
+        }
         const monitor = Main.layoutManager.primaryMonitor;
         // Height for the card's width, so wrapped text is not cut off.
-        const width = actor.get_preferred_width(-1)[1];
-        actor.set_size(width, actor.get_preferred_height(width)[1]);
+        actor.set_size(CARD_WIDTH, actor.get_preferred_height(CARD_WIDTH)[1]);
         actor.set_position(
-            Math.round(Math.max(monitor.x + 8, Math.min(x, monitor.x + monitor.width - width - 8))),
+            Math.round(Math.max(monitor.x + 8, Math.min(x, monitor.x + monitor.width - CARD_WIDTH - 8))),
             Math.round(Main.panel.height + 6 + offset));
+        actor.opacity = 255;
+        return true;
     }
 
     // ── card (hover and bubble share it) ──────────────────────────────────
@@ -305,9 +352,17 @@ class MoniOrcaBar extends PanelMenu.Button {
             };
             const q = s.question;
             const answerable = kind === 'waiting' && this._settings.get_boolean('orca-answer') && s.agentType === 'claude';
-            if (answerable && q?.options)
-                q.options.forEach((o, i) => button(clip(o, 24), false, () => this._answer(s, i + 1)));
-            else if (answerable && q?.permission)
+            if (answerable && q?.options) {
+                // Choices stacked full width, numbered like the prompt they answer.
+                const choices = new St.BoxLayout({style_class: 'moni-orca-choices', vertical: true});
+                q.options.forEach((o, i) => {
+                    const b = new St.Button({style_class: 'moni-orca-action moni-orca-choice', can_focus: false, x_expand: true,
+                        child: new St.Label({text: `${i + 1}   ${clip(o, 40)}`, x_align: Clutter.ActorAlign.START, x_expand: true})});
+                    b.connect('clicked', () => this._answer(s, i + 1));
+                    choices.add_child(b);
+                });
+                card.add_child(choices);
+            } else if (answerable && q?.permission)
                 button('Allow', false, () => this._answer(s, 1));
             button(kind === 'waiting' ? 'Open' : 'Show', true, () => this._go(s));
             if (kind === 'done')
@@ -362,7 +417,8 @@ class MoniOrcaBar extends PanelMenu.Button {
     destroy() {
         this._destroyed = true;
         this._cancel.cancel();
-        for (const t of [this._timer, this._hoverTimer])
+        this._monitor?.cancel();
+        for (const t of [this._timer, this._hoverTimer, this._layoutTimer])
             if (t)
                 GLib.source_remove(t);
         this._hideCard();
