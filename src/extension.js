@@ -21,6 +21,7 @@ import * as Cap from './capture.js';
 import * as Clip from './clipboard.js';
 import * as Up from './updater.js';
 import * as Quick from './quick.js';
+import * as OrcaBar from './orcabar.js';
 
 const HISTORY = 180;
 const PANEL_GRAPH_H = 18;
@@ -1010,6 +1011,21 @@ export default class MoniExtension extends Extension {
         this._quickIds = ['changed::show-quick', 'changed::quick-items'].map(sig =>
             this._settings.connect(sig, () => this._syncQuick()));
         this._syncQuick();
+        this._orcaId = this._settings.connect('changed::show-orca', () => this._syncOrca());
+        this._syncOrca();
+    }
+
+    // Orca sessions: on when enabled and the Orca CLI is installed; the bar
+    // hides itself while Orca is closed.
+    _syncOrca() {
+        const on = this._settings.get_boolean('show-orca') && !!OrcaBar.cliPath();
+        if (on && !this._orca) {
+            this._orca = new OrcaBar.OrcaBar(this._settings);
+            OrcaBar.addToPanel(this.uuid, this._orca);
+        } else if (!on && this._orca) {
+            this._orca.destroy();
+            this._orca = null;
+        }
     }
 
     // Quick copy buttons: on when enabled and at least one item is set.
@@ -1048,6 +1064,9 @@ export default class MoniExtension extends Extension {
         this._quickIds.forEach(id => this._settings.disconnect(id));
         this._quick?.destroy();
         this._quick = null;
+        this._settings.disconnect(this._orcaId);
+        this._orca?.destroy();
+        this._orca = null;
         if (this._clip) {
             Main.wm.removeKeybinding('clipboard-shortcut');
             this._clip.destroy();

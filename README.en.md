@@ -240,6 +240,26 @@ the cursor is (default), only copies it, or only pastes it (your clipboard is pu
 text itself is never shown in the panel. Quick copies stay out of the clipboard history. Texts are stored in plain text in dconf and
 are included in *Export*, like ★ favorites.
 
+### 🐋 Orca sessions
+
+Agent sessions from the [Orca](https://github.com/stablyai/orca) app sit on the left of the top bar, next to
+Activities: one dot and a name per session.
+
+| Dot | Meaning |
+|---|---|
+| 🟢 green (slow pulse) | working |
+| 🟡 yellow | waiting on you: a permission prompt or a question |
+| 🔵 blue | finished, not looked at yet |
+| gray dot / hollow ring | finished / no agent |
+
+- **Hover** for a card with the last request and reply, branch and PR. **Click** to jump to that session's terminal tab with the Orca window in front.
+- **Bubbles** drop from a session's name when it finishes or starts waiting on you. A waiting bubble stays until it is answered. GNOME's Do Not Disturb silences them.
+- **Answer from the bubble** (off by default): Claude Code questions and permission prompts get their choices as buttons, which type the number.
+- **Shown sessions**: tick sessions in Settings to always show them, in your order, even when idle. With none ticked, the *Recent sessions* most recently active appear. The rest are in the ⌄ list.
+
+Moni reads `orca-ide worktree ps --json` every 3 s while something is running and every 10 s otherwise, and not at
+all while no Orca window is open. It never calls bare `orca`, which is the screen reader on Linux.
+
 ## Install
 
 ```bash
@@ -378,6 +398,9 @@ gsettings --schemadir ~/.local/share/gnome-shell/extensions/moni@ingjae.github.i
 | `update-check` / `update-auto` | `true` / `false` | daily release check / install without asking |
 | `show-quick` / `quick-items` | `true` / `[]` | quick copy buttons / items as JSON (`[{"icon": "GH", "image": "…", "text": "…"}]`) |
 | `quick-action` | `both` | on click: `both` (copy and paste) / `copy` / `paste` |
+| `show-orca` / `orca-count` | `true` / `4` | Orca sessions / recent sessions shown when none are picked |
+| `orca-sessions` | `[]` | sessions always shown (JSON array of worktree ids, in order) |
+| `orca-bubbles` / `orca-answer` | `true` / `false` | bubbles / answer from the bubble |
 | `show-clipboard` / `clipboard-shortcut` | `true` / `<Super><Shift>v` | clipboard history icon + shortcut |
 | `clipboard-paste` | `true` | paste into the focused window on pick |
 | `clipboard-size` | `50` | recent items kept (memory only) |
@@ -431,6 +454,8 @@ src/
   capture.js      area selection, capture, pins, recording
   clipboard.js    clipboard history, favorites, paste-on-pick
   quick.js        quick copy buttons in the top bar
+  orca.js         Orca sessions via the `orca-ide` CLI — GLib/Gio only
+  orcabar.js      Orca sessions on the left of the top bar, hover cards, bubbles
   editor.js       Moni Shot annotation editor (GTK 4, separate process)
   updater.js      daily release check, update notification, restart
   helper.js       scroll stitching, OCR, release download + SHA-256 check (separate process, also imported by the editor)

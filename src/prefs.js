@@ -3,6 +3,8 @@ import Gtk from 'gi://Gtk';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
+import * as O from './orca.js';
+
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 const POSITIONS = ['left', 'center', 'right'];
@@ -158,6 +160,15 @@ export default class MoniPreferences extends ExtensionPreferences {
         row(quick, 'On click', 'Paste types it at the cursor; Paste only restores your clipboard', action);
         this._quickItems(window, settings, quick);
 
+        const orca = group('Orca sessions',
+            'Agent sessions from the Orca app on the left of the top bar. Hover for the last reply, click to jump there. ' +
+            'Pick sessions below to always show them in your order; with none picked, the most recent appear.');
+        toggle(orca, 'show-orca', 'Orca sessions', 'Shown while Orca is open');
+        spin(orca, 'orca-count', 'Recent sessions', 'How many to show when none are picked', 1, 10, 1);
+        toggle(orca, 'orca-bubbles', 'Bubbles', 'When a session finishes or waits on you. Follows Do Not Disturb');
+        toggle(orca, 'orca-answer', 'Answer from the bubble', 'Claude Code questions and permission prompts get buttons that type the choice');
+        this._orcaSessions(settings, group('Shown sessions'));
+
         const general = group('General');
         spin(general, 'update-interval', 'Update interval', 'Milliseconds', 500, 10000, 250);
         spin(general, 'graph-width', 'Graph width', 'Pixels per panel graph', 20, 120, 4);
@@ -284,6 +295,74 @@ export default class MoniPreferences extends ExtensionPreferences {
                 button.sensitive = true;
             }
         });
+    }
+
+    // Every Orca session with a checkbox; picked ones first, in their order,
+    // with up / down to reorder. The rest follow, most recent first.
+    _orcaSessions(settings, g) {
+        let sessions = [], rows = [], note = '';
+        const store = ids => settings.set_string('orca-sessions', JSON.stringify(ids));
+        const flat = (icon, tooltip, onClick, sensitive = true) => {
+            const b = new Gtk.Button({icon_name: icon, tooltip_text: tooltip, valign: Gtk.Align.CENTER, sensitive});
+            b.add_css_class('flat');
+            b.connect('clicked', onClick);
+            return b;
+        };
+        const render = () => {
+            rows.forEach(r => g.remove(r));
+            const chosen = O.readChosen(settings);
+            const byId = new Map(sessions.map(s => [s.id, s]));
+            const picked = chosen.filter(id => byId.has(id)).map(id => byId.get(id));
+            const rest = O.byRecent(sessions.filter(s => !chosen.includes(s.id)));
+            rows = [...picked, ...rest].map(s => {
+                const i = chosen.indexOf(s.id);
+                const r = new Adw.ActionRow({
+                    title: GLib.markup_escape_text(s.name, -1),
+                    subtitle: GLib.markup_escape_text([s.repo !== s.name ? s.repo : '', s.branch !== s.name ? s.branch : '', O.ago(s.lastActivity)].filter(Boolean).join(' · '), -1),
+                });
+                const check = new Gtk.CheckButton({active: i >= 0, valign: Gtk.Align.CENTER});
+                check.connect('toggled', () => {
+                    const ids = O.readChosen(settings).filter(id => id !== s.id);
+                    store(check.active ? [...ids, s.id] : ids);
+                });
+                r.add_prefix(check);
+                r.activatable_widget = check;
+                if (i >= 0) {
+                    const move = d => {
+                        const ids = O.readChosen(settings);
+                        [ids[i], ids[i + d]] = [ids[i + d], ids[i]];
+                        store(ids);
+                    };
+                    r.add_suffix(flat('go-up-symbolic', 'Move up', () => move(-1), i > 0));
+                    r.add_suffix(flat('go-down-symbolic', 'Move down', () => move(1), i < picked.length - 1));
+                }
+                g.add(r);
+                return r;
+            });
+            if (!rows.length) {
+                const r = new Adw.ActionRow({title: note || 'No sessions'});
+                g.add(r);
+                rows.push(r);
+            }
+        };
+        const load = () => {
+            const cli = O.cliPath();
+            if (!cli) {
+                note = 'Orca CLI not found (orca-ide)';
+                render();
+                return;
+            }
+            O.run(cli, ['worktree', 'ps']).then(result => {
+                sessions = O.parseSessions(result);
+                note = '';
+            }).catch(() => {
+                sessions = [];
+                note = 'Orca is not running';
+            }).finally(render);
+        };
+        g.set_header_suffix(flat('view-refresh-symbolic', 'Refresh', load));
+        settings.connect('changed::orca-sessions', render);
+        load();
     }
 
     // Item rows with Edit / Delete, then an Add row; edits open a small dialog.

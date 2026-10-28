@@ -234,6 +234,24 @@ GitHub 토큰, 로봇 IP, 긴 명령어처럼 자주 복사하는 텍스트를 �
 누르면 버튼이 잠깐 ✓로 바뀌고, *On click* 설정에 따라 **복사 후 커서 위치에 붙여넣기**(기본), 복사만, 붙여넣기만(이후 원래 클립보드로 되돌림) 중 하나를 수행합니다. 텍스트 자체는 패널에 보이지 않고, 클립보드 기록에도 남지 않습니다.
 텍스트는 ★ 즐겨찾기처럼 dconf에 평문으로 저장되며 *Export*에도 포함됩니다.
 
+### 🐋 Orca 세션
+
+[Orca](https://github.com/stablyai/orca) 앱에서 돌아가는 에이전트 세션을 상단바 왼쪽(Activities 옆)에 보여 줍니다. 세션마다 점 하나와 이름이 표시됩니다.
+
+| 점 | 뜻 |
+|---|---|
+| 🟢 초록 (천천히 깜빡임) | 작업 중 |
+| 🟡 노랑 | 사용자를 기다림: 권한 요청이나 선택 질문 |
+| 🔵 파랑 | 끝났고 아직 확인하지 않음 |
+| 회색 점 / 빈 원 | 끝남 / 에이전트 없음 |
+
+- **마우스 오버**: 마지막 요청과 답변, 브랜치, PR이 카드로 표시됩니다. **클릭**하면 그 세션의 터미널 탭으로 이동하고 Orca 창을 앞으로 가져옵니다.
+- **말풍선**: 세션이 끝나거나 사용자를 기다리기 시작하면 해당 이름 아래에 말풍선이 뜹니다. 기다림 말풍선은 답할 때까지 남아 있습니다. GNOME 방해 금지 모드를 따릅니다.
+- **바로 답하기**(기본 꺼짐): 설정 → *Answer from the bubble*을 켜면 Claude Code의 선택 질문과 권한 요청 말풍선에 선택지 버튼이 생기고, 누르면 그 번호를 입력합니다.
+- **보여 줄 세션**: 설정 → *Shown sessions*에서 체크한 세션은 활동이 없어도 항상, 지정한 순서대로 보입니다. 체크한 세션이 없으면 최근 활동 순으로 *Recent sessions*개가 보입니다. 나머지는 ⌄ 목록에 있습니다.
+
+`orca-ide worktree ps --json`을 작업 중일 때 3초, 아닐 때 10초마다 읽습니다. Orca 창이 없으면 읽지 않고 아무것도 표시하지 않습니다. 화면 리더와 이름이 겹치는 `orca`는 호출하지 않습니다.
+
 ## 설치
 
 ```bash
@@ -369,6 +387,9 @@ gsettings --schemadir ~/.local/share/gnome-shell/extensions/moni@ingjae.github.i
 | `update-check` / `update-auto` | `true` / `false` | 하루 1회 릴리즈 확인 / 묻지 않고 설치 |
 | `show-quick` / `quick-items` | `true` / `[]` | 빠른 복사 버튼 / 항목 JSON (`[{"icon": "GH", "image": "…", "text": "…"}]`) |
 | `quick-action` | `both` | 클릭 동작: `both`(복사+붙여넣기) / `copy` / `paste` |
+| `show-orca` / `orca-count` | `true` / `4` | Orca 세션 / 지정한 세션이 없을 때 보여 줄 최근 세션 수 |
+| `orca-sessions` | `[]` | 항상 보여 줄 세션(worktree id JSON 배열, 순서 유지) |
+| `orca-bubbles` / `orca-answer` | `true` / `false` | 말풍선 / 말풍선에서 바로 답하기 |
 | `show-clipboard` / `clipboard-shortcut` | `true` / `<Super><Shift>v` | 클립보드 기록 아이콘 + 단축키 |
 | `clipboard-paste` | `true` | 고르면 포커스된 창에 붙여넣기 |
 | `clipboard-size` | `50` | 보관할 최근 항목 수(메모리에만) |
@@ -422,6 +443,8 @@ src/
   capture.js      영역 선택, 캡처, 핀, 녹화
   clipboard.js    클립보드 기록, 즐겨찾기, 붙여넣기
   quick.js        상단바 빠른 복사 버튼
+  orca.js         Orca 세션 읽기 — `orca-ide` CLI, GLib/Gio만 사용
+  orcabar.js      상단바 왼쪽 Orca 세션, 호버 카드, 말풍선
   editor.js       Moni Shot 주석 편집기 (GTK 4, 별도 프로세스)
   updater.js      하루 1회 릴리즈 확인, 업데이트 알림, 재시작
   helper.js       스크롤 이어 붙이기, OCR, 릴리즈 다운로드 + SHA-256 확인 (별도 프로세스, 편집기도 import)
