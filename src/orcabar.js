@@ -23,7 +23,7 @@ export const cliPath = O.cliPath;
 const LABEL = {waiting: 'Needs you', working: 'Working', done: 'Done', idle: 'Idle'};
 // Fallback polling; Orca's hook status file triggers a read right away.
 const BUSY_POLL = 3, IDLE_POLL = 10, MIN_GAP = 1500, NUDGE_DELAY = 250;
-const HOVER_DELAY = 350, BUBBLE_MS = 6000, CARD_WIDTH = 320;
+const HOVER_DELAY = 350, CARD_WIDTH = 320;
 
 const orcaWindow = () => global.get_window_actors().map(a => a.meta_window).find(w => w.get_wm_class() === 'orca');
 const plain = t => String(t ?? '').replace(/[`*#>|]/g, '').replace(/\s+/g, ' ').trim();
@@ -237,23 +237,8 @@ class MoniOrcaBar extends PanelMenu.Button {
         if (this._hover?.session.id === s.id)
             this._hideCard();
         const actor = this._card(s, kind);
-        const entry = {actor, session: s, kind};
-        this._bubbles.set(s.id, entry);
-        if (kind === 'done')
-            this._expire(entry, BUBBLE_MS);
+        this._bubbles.set(s.id, {actor, session: s, kind});
         this._layoutBubbles();
-    }
-
-    // Done bubbles fade on their own, but not while the pointer is on them.
-    _expire(entry, ms) {
-        entry.timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
-            entry.timer = 0;
-            if (entry.actor.hover || this._typing?.card === entry.actor)
-                this._expire(entry, 1500);
-            else
-                this._closeBubble(entry.session.id);
-            return GLib.SOURCE_REMOVE;
-        });
     }
 
     _closeBubble(id) {
@@ -262,18 +247,17 @@ class MoniOrcaBar extends PanelMenu.Button {
             return;
         if (this._typing?.card === b.actor)
             this._stopTyping();
-        if (b.timer)
-            GLib.source_remove(b.timer);
         this._bubbles.delete(id);
         b.actor.destroy();
         this._layoutBubbles();
     }
 
-    // A waiting bubble stays until the session stops waiting.
+    // Bubbles stay until dismissed or answered, or until the session moves
+    // on: a waiting one stops waiting, a finished one starts working again.
     _dropStaleBubbles() {
         for (const [id, b] of [...this._bubbles]) {
             const s = this._find(id);
-            if (!s || (b.kind === 'waiting' && s.state !== 'waiting'))
+            if (!s || (b.kind === 'waiting' ? s.state !== 'waiting' : s.state === 'working' || s.state === 'waiting'))
                 this._closeBubble(id);
         }
     }
