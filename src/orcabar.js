@@ -10,6 +10,7 @@ import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 import St from 'gi://St';
 import Clutter from 'gi://Clutter';
+import Shell from 'gi://Shell';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
@@ -247,7 +248,7 @@ class MoniOrcaBar extends PanelMenu.Button {
     _expire(entry, ms) {
         entry.timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
             entry.timer = 0;
-            if (entry.actor.hover)
+            if (entry.actor.hover || this._typing?.card === entry.actor)
                 this._expire(entry, 1500);
             else
                 this._closeBubble(entry.session.id);
@@ -259,6 +260,8 @@ class MoniOrcaBar extends PanelMenu.Button {
         const b = this._bubbles.get(id);
         if (!b)
             return;
+        if (this._typing?.card === b.actor)
+            this._stopTyping();
         if (b.timer)
             GLib.source_remove(b.timer);
         this._bubbles.delete(id);
@@ -364,6 +367,38 @@ class MoniOrcaBar extends PanelMenu.Button {
                 card.add_child(choices);
             } else if (answerable && q?.permission)
                 button('Allow', false, () => this._answer(s, 1));
+            // A text field: a typed answer to a question (Claude Code's
+            // "Type something" choice), or the next prompt for a finished one.
+            if (this._settings.get_boolean('orca-answer') && (kind === 'done' || (answerable && !q?.permission))) {
+                const field = new St.Entry({style_class: 'moni-orca-entry', can_focus: true, x_expand: true,
+                    hint_text: kind === 'done' ? 'Next prompt…' : 'Type an answer…'});
+                field.clutter_text.connect('button-press-event', () => {
+                    this._startTyping(card, field);
+                    return Clutter.EVENT_PROPAGATE;
+                });
+                field.clutter_text.connect('key-press-event', (_a, event) => {
+                    if (event.get_key_symbol() !== Clutter.KEY_Escape)
+                        return Clutter.EVENT_PROPAGATE;
+                    this._stopTyping();
+                    return Clutter.EVENT_STOP;
+                });
+                field.clutter_text.connect('activate', () => {
+                    const text = field.text.trim();
+                    if (text)
+                        this._reply(s, text, kind === 'waiting', q?.options ? q.options.length + 1 : 0);
+                });
+                // While typing, a click outside the bubble ends it.
+                card.connect('captured-event', (_a, event) => {
+                    if (this._typing?.card === card && event.type() === Clutter.EventType.BUTTON_PRESS) {
+                        const [x, y] = event.get_coords();
+                        const [cx, cy] = card.get_transformed_position();
+                        if (x < cx || y < cy || x > cx + card.width || y > cy + card.height)
+                            this._stopTyping();
+                    }
+                    return Clutter.EVENT_PROPAGATE;
+                });
+                card.add_child(field);
+            }
             button(kind === 'waiting' ? 'Open' : 'Show', true, () => this._go(s));
             if (kind === 'done')
                 button('Dismiss', false, () => this._closeBubble(s.id));
@@ -401,6 +436,57 @@ class MoniOrcaBar extends PanelMenu.Button {
     }
 
     // Claude Code picks an option by its number key.
+    // The top bar gets no keys on X11 without a grab, so typing in a
+    // bubble holds one until Enter, Escape or a click elsewhere.
+    _startTyping(card, field) {
+        if (this._typing)
+            return;
+        const grab = Main.pushModal(card, {actionMode: Shell.ActionMode.POPUP});
+        if (!grab)
+            return;
+        this._typing = {card, grab};
+        global.stage.set_key_focus(field.clutter_text);
+    }
+
+    _stopTyping() {
+        if (!this._typing)
+            return;
+        const {grab} = this._typing;
+        this._typing = null;
+        global.stage.set_key_focus(null);
+        Main.popModal(grab);
+    }
+
+    // A finished session gets a new prompt. A question gets its "Type
+    // something" choice, then the text and Enter as plain keys: Orca refuses
+    // a prompt (text + Enter in one send) while the agent waits.
+    async _reply(s, text, waiting, choice) {
+        this._closeBubble(s.id);
+        const pause = ms => new Promise(resolve => GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
+            resolve();
+            return GLib.SOURCE_REMOVE;
+        }));
+        try {
+            const t = await this._terminal(s);
+            const send = args => O.run(this._cli, ['terminal', 'send', '--terminal', t.handle, ...args], this._cancel);
+            if (t && !waiting) {
+                await send(['--text', text, '--enter']);
+            } else if (t) {
+                if (choice) {
+                    await send(['--text', String(choice)]);
+                    await pause(300);
+                }
+                await send(['--text', text]);
+                await pause(150);
+                await send(['--enter']);
+            }
+        } catch (e) {
+            console.warn(`moni: orca: ${e.message}`);
+        }
+        if (!this._destroyed)
+            this._pollSoon();
+    }
+
     async _answer(s, n) {
         this._closeBubble(s.id);
         try {
@@ -416,6 +502,7 @@ class MoniOrcaBar extends PanelMenu.Button {
 
     destroy() {
         this._destroyed = true;
+        this._stopTyping();
         this._cancel.cancel();
         this._monitor?.cancel();
         for (const t of [this._timer, this._hoverTimer, this._layoutTimer])

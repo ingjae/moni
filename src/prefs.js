@@ -210,7 +210,7 @@ export default class MoniPreferences extends ExtensionPreferences {
                 'Agent sessions from the Orca app on the left of the top bar. Hover for the last reply, click to jump there.');
             toggle(orca, 'show-orca', 'Orca sessions', 'Shown while Orca is open');
             toggle(orca, 'orca-bubbles', 'Bubbles', 'When a session finishes or waits on you. Follows Do Not Disturb');
-            toggle(orca, 'orca-answer', 'Answer from the bubble', 'Claude Code questions and permission prompts get buttons that type the choice');
+            toggle(orca, 'orca-answer', 'Answer from the bubble', 'Choice buttons and a text field for Claude Code questions; a field for the next prompt when a session finishes');
             spin(orca, 'orca-count', 'Recent sessions', 'How many to show when none are picked', 1, 10, 1);
             this._orcaSessions(settings, group('Shown sessions',
                 'Ticked sessions always show, in this order. With none ticked, the most recent appear.'));
