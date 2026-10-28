@@ -33,6 +33,11 @@
     <key name="show-quick" type="b"><default>true</default><summary>Quick copy buttons in the top bar</summary></key>
     <key name="quick-action" type="s"><default>'both'</default><summary>On click: copy, paste (at the cursor) or both</summary></key>
     <key name="quick-items" type="s"><default>'[]'</default><summary>Quick copy items as JSON: [{"icon": "GH", "image": "/path.png", "text": "…"}]</summary></key>
+    <key name="show-orca" type="b"><default>true</default><summary>Orca agent sessions on the left of the top bar</summary></key>
+    <key name="orca-sessions" type="s"><default>'[]'</default><summary>Worktree ids of the sessions to always show, in order, as JSON</summary></key>
+    <key name="orca-count" type="i"><range min="1" max="10"/><default>4</default><summary>Most recent sessions shown when none are picked</summary></key>
+    <key name="orca-bubbles" type="b"><default>true</default><summary>Bubble when a session finishes or waits on you</summary></key>
+    <key name="orca-answer" type="b"><default>false</default><summary>Answer an agent's question from its bubble</summary></key>
     <key name="ocr" type="b"><default>false</default><summary>Text recognition (OCR) and QR codes in screenshots</summary></key>
     <key name="update-check" type="b"><default>true</default><summary>Check GitHub once a day for a new release</summary></key>
     <key name="update-auto" type="b"><default>false</default><summary>Install new releases without asking</summary></key>
