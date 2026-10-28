@@ -10,6 +10,7 @@ import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 import St from 'gi://St';
 import Clutter from 'gi://Clutter';
+import Shell from 'gi://Shell';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
@@ -20,8 +21,9 @@ import * as O from './orca.js';
 export const cliPath = O.cliPath;
 
 const LABEL = {waiting: 'Needs you', working: 'Working', done: 'Done', idle: 'Idle'};
-const BUSY_POLL = 3, IDLE_POLL = 10;
-const HOVER_DELAY = 350, BUBBLE_MS = 6000;
+// Fallback polling; Orca's hook status file triggers a read right away.
+const BUSY_POLL = 3, IDLE_POLL = 10, MIN_GAP = 1500, NUDGE_DELAY = 250;
+const HOVER_DELAY = 350, CARD_WIDTH = 320, MAX_BUBBLES = 3;
 
 const orcaWindow = () => global.get_window_actors().map(a => a.meta_window).find(w => w.get_wm_class() === 'orca');
 const plain = t => String(t ?? '').replace(/[`*#>|]/g, '').replace(/\s+/g, ' ').trim();
@@ -66,6 +68,18 @@ class MoniOrcaBar extends PanelMenu.Button {
         this._ids = ['changed::orca-sessions', 'changed::orca-count'].map(sig => settings.connect(sig, () => this._render(true)));
         this._ids.push(settings.connect('changed::style', () => this._render(true)));
         this.menu.connect('open-state-changed', (_m, open) => open && this._hideCard());
+        // Orca rewrites this file on every agent hook event (state changes
+        // included), so a change means "read now" instead of up to 3 s later.
+        try {
+            this._monitor = Gio.File.new_for_path(O.hookDir()).monitor_directory(Gio.FileMonitorFlags.WATCH_MOVES, null);
+            this._monitor.connect('changed', (_m, file, other) => {
+                if ([file, other].some(f => f?.get_basename() === 'last-status.json'))
+                    this._pollSoon();
+            });
+        } catch (e) {
+            this._monitor = null;
+        }
+        this._lastPoll = 0;
         this._poll();
     }
 
@@ -77,12 +91,18 @@ class MoniOrcaBar extends PanelMenu.Button {
         if (this._cli && orcaWindow()) {
             try {
                 sessions = O.parseSessions(await O.run(this._cli, ['worktree', 'ps'], this._cancel));
+                this._failures = 0;
             } catch (e) {
                 if (this._destroyed)
                     return;
+                // One failed read must not wipe the bar and its bubbles.
+                this._failures = (this._failures ?? 0) + 1;
+                if (this._failures < 3)
+                    sessions = this._sessions;
             }
         }
         this._polling = false;
+        this._lastPoll = Date.now();
         if (this._destroyed)
             return;
         const events = O.transitions(this._states, sessions);
@@ -92,26 +112,33 @@ class MoniOrcaBar extends PanelMenu.Button {
         events.forEach(e => this._bubble(e.session, e.kind));
         this._dropStaleBubbles();
         const busy = sessions.some(s => s.state === 'working' || s.state === 'waiting');
-        this._schedule(this._soon ? 800 : (busy ? BUSY_POLL : IDLE_POLL) * 1000);
-        this._soon = false;
+        this._schedule((busy ? BUSY_POLL : IDLE_POLL) * 1000);
+        if (this._soon) {
+            this._soon = false;
+            this._pollSoon();
+        }
     }
 
     _schedule(ms) {
+        if (this._timer)
+            GLib.source_remove(this._timer);
+        this._dueAt = Date.now() + ms;
         this._timer = GLib.timeout_add(GLib.PRIORITY_LOW, ms, () => {
             this._poll();
             return GLib.SOURCE_REMOVE;
         });
     }
 
-    // Right after an answer, without starting a second polling loop.
+    // Something changed (an answer, an Orca hook event): read again soon,
+    // but never twice within MIN_GAP and without a second polling loop.
     _pollSoon() {
         if (this._polling) {
             this._soon = true;
             return;
         }
-        if (this._timer)
-            GLib.source_remove(this._timer);
-        this._schedule(800);
+        const ms = Math.max(NUDGE_DELAY, MIN_GAP - (Date.now() - this._lastPoll));
+        if (!this._timer || this._dueAt > Date.now() + ms)
+            this._schedule(ms);
     }
 
     // ── chips ─────────────────────────────────────────────────────────────
@@ -192,7 +219,8 @@ class MoniOrcaBar extends PanelMenu.Button {
         this._hideCard();
         const actor = this._card(s, null);
         actor.connect('notify::hover', () => !actor.hover && !chip.hover && this._hideCard());
-        this._place(actor, chip, 0);
+        if (!this._place(actor, chip, 0))
+            this._retryLayout(() => this._hover?.actor === actor && this._place(actor, chip, 0));
         this._hover = {actor, session: s};
     }
 
@@ -209,66 +237,118 @@ class MoniOrcaBar extends PanelMenu.Button {
         if (this._hover?.session.id === s.id)
             this._hideCard();
         const actor = this._card(s, kind);
-        const entry = {actor, session: s, kind};
-        this._bubbles.set(s.id, entry);
-        if (kind === 'done')
-            this._expire(entry, BUBBLE_MS);
+        this._bubbles.set(s.id, {actor, session: s, kind, at: Date.now()});
         this._layoutBubbles();
-    }
-
-    // Done bubbles fade on their own, but not while the pointer is on them.
-    _expire(entry, ms) {
-        entry.timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
-            entry.timer = 0;
-            if (entry.actor.hover)
-                this._expire(entry, 1500);
-            else
-                this._closeBubble(entry.session.id);
-            return GLib.SOURCE_REMOVE;
-        });
     }
 
     _closeBubble(id) {
         const b = this._bubbles.get(id);
         if (!b)
             return;
-        if (b.timer)
-            GLib.source_remove(b.timer);
+        if (this._typing?.card === b.actor)
+            this._stopTyping();
         this._bubbles.delete(id);
         b.actor.destroy();
         this._layoutBubbles();
     }
 
-    // A waiting bubble stays until the session stops waiting.
+    // Bubbles stay until dismissed or answered, or until the session moves
+    // on: a waiting one stops waiting, a finished one starts working again.
     _dropStaleBubbles() {
         for (const [id, b] of [...this._bubbles]) {
             const s = this._find(id);
-            if (!s || (b.kind === 'waiting' && s.state !== 'waiting'))
+            if (!s || (b.kind === 'waiting' ? s.state !== 'waiting' : s.state === 'working' || s.state === 'waiting'))
                 this._closeBubble(id);
         }
     }
 
     // Under its chip (or the list button); later bubbles stack below.
+    // Questions first, then the newest; past MAX_BUBBLES the rest wait
+    // behind a "+N more · Dismiss all" pill.
     _layoutBubbles() {
-        let offset = 0;
-        for (const b of this._bubbles.values()) {
-            const anchor = this._chips?.get(b.session.id) ?? this._more ?? this;
-            this._place(b.actor, anchor, offset);
-            offset += b.actor.get_preferred_height(-1)[1] + 8;
+        const order = [...this._bubbles.values()].sort((a, b) =>
+            (b.kind === 'waiting') - (a.kind === 'waiting') || b.at - a.at);
+        if (order.length <= MAX_BUBBLES)
+            this._expanded = false;
+        const shown = this._expanded ? order : order.slice(0, MAX_BUBBLES);
+        let offset = 0, placed = true, last = this;
+        for (const b of order) {
+            b.actor.visible = shown.includes(b);
+            if (!b.actor.visible)
+                continue;
+            last = this._chips?.get(b.session.id) ?? this._more ?? this;
+            placed = this._place(b.actor, last, offset) && placed;
+            offset += b.actor.height + 8;
         }
+        this._layoutPill(order.length - shown.length, order.length > MAX_BUBBLES, last, offset);
+        if (!placed)
+            this._retryLayout(() => this._layoutBubbles());
+    }
+
+    _layoutPill(hidden, show, anchor, offset) {
+        if (!show) {
+            this._pill?.destroy();
+            this._pill = null;
+            return;
+        }
+        if (!this._pill) {
+            this._pill = new St.BoxLayout({style_class: 'moni-orca-pill', reactive: true});
+            const button = (style, fn) => {
+                const b = new St.Button({style_class: `moni-orca-pill-button ${style}`, can_focus: false});
+                b.connect('clicked', fn);
+                this._pill.add_child(b);
+                return b;
+            };
+            this._pillMore = button('', () => {
+                this._expanded = !this._expanded;
+                this._layoutBubbles();
+            });
+            button('moni-orca-pill-dismiss', () => this._dismissAll()).label = 'Dismiss all';
+        }
+        this._pillMore.label = hidden > 0 ? `+${hidden} more` : 'Show less';
+        if (!this._pill.get_parent())
+            Main.layoutManager.addTopChrome(this._pill);
+        const [x] = anchor.get_transformed_position();
+        if (Number.isFinite(x))
+            this._pill.set_position(Math.round(x), Math.round(Main.panel.height + 6 + offset));
+    }
+
+    // Finished sessions only: a question still needs an answer.
+    _dismissAll() {
+        for (const [id, b] of [...this._bubbles])
+            if (b.kind === 'done')
+                this._closeBubble(id);
+    }
+
+    // A chip rebuilt in this poll has no position until the next layout.
+    _retryLayout(fn) {
+        if (this._layoutTimer)
+            return;
+        this._layoutTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
+            this._layoutTimer = 0;
+            fn();
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     _place(actor, anchor, offset) {
         if (!actor.get_parent())
             Main.layoutManager.addTopChrome(actor);
+        // A NaN position (anchor not laid out yet) leaves the card
+        // unallocated for good, so wait for a real one.
         const [x] = anchor.get_transformed_position();
+        if (!Number.isFinite(x)) {
+            actor.opacity = 0;
+            return false;
+        }
         const monitor = Main.layoutManager.primaryMonitor;
         // Height for the card's width, so wrapped text is not cut off.
-        const width = actor.get_preferred_width(-1)[1];
-        actor.set_size(width, actor.get_preferred_height(width)[1]);
+        actor.set_size(CARD_WIDTH, actor.get_preferred_height(CARD_WIDTH)[1]);
         actor.set_position(
-            Math.round(Math.max(monitor.x + 8, Math.min(x, monitor.x + monitor.width - width - 8))),
+            Math.round(Math.max(monitor.x + 8, Math.min(x, monitor.x + monitor.width - CARD_WIDTH - 8))),
             Math.round(Main.panel.height + 6 + offset));
+        actor.opacity = 255;
+        return true;
     }
 
     // ── card (hover and bubble share it) ──────────────────────────────────
@@ -305,10 +385,50 @@ class MoniOrcaBar extends PanelMenu.Button {
             };
             const q = s.question;
             const answerable = kind === 'waiting' && this._settings.get_boolean('orca-answer') && s.agentType === 'claude';
-            if (answerable && q?.options)
-                q.options.forEach((o, i) => button(clip(o, 24), false, () => this._answer(s, i + 1)));
-            else if (answerable && q?.permission)
+            if (answerable && q?.options) {
+                // Choices stacked full width, numbered like the prompt they answer.
+                const choices = new St.BoxLayout({style_class: 'moni-orca-choices', vertical: true});
+                q.options.forEach((o, i) => {
+                    const b = new St.Button({style_class: 'moni-orca-action moni-orca-choice', can_focus: false, x_expand: true,
+                        child: new St.Label({text: `${i + 1}   ${clip(o, 40)}`, x_align: Clutter.ActorAlign.START, x_expand: true})});
+                    b.connect('clicked', () => this._answer(s, i + 1));
+                    choices.add_child(b);
+                });
+                card.add_child(choices);
+            } else if (answerable && q?.permission)
                 button('Allow', false, () => this._answer(s, 1));
+            // A text field: a typed answer to a question (Claude Code's
+            // "Type something" choice), or the next prompt for a finished one.
+            if (this._settings.get_boolean('orca-answer') && (kind === 'done' || (answerable && !q?.permission))) {
+                const field = new St.Entry({style_class: 'moni-orca-entry', can_focus: true, x_expand: true,
+                    hint_text: kind === 'done' ? 'Next prompt…' : 'Type an answer…'});
+                field.clutter_text.connect('button-press-event', () => {
+                    this._startTyping(card, field);
+                    return Clutter.EVENT_PROPAGATE;
+                });
+                field.clutter_text.connect('key-press-event', (_a, event) => {
+                    if (event.get_key_symbol() !== Clutter.KEY_Escape)
+                        return Clutter.EVENT_PROPAGATE;
+                    this._stopTyping();
+                    return Clutter.EVENT_STOP;
+                });
+                field.clutter_text.connect('activate', () => {
+                    const text = field.text.trim();
+                    if (text)
+                        this._reply(s, text, kind === 'waiting', q?.options ? q.options.length + 1 : 0);
+                });
+                // While typing, a click outside the bubble ends it.
+                card.connect('captured-event', (_a, event) => {
+                    if (this._typing?.card === card && event.type() === Clutter.EventType.BUTTON_PRESS) {
+                        const [x, y] = event.get_coords();
+                        const [cx, cy] = card.get_transformed_position();
+                        if (x < cx || y < cy || x > cx + card.width || y > cy + card.height)
+                            this._stopTyping();
+                    }
+                    return Clutter.EVENT_PROPAGATE;
+                });
+                card.add_child(field);
+            }
             button(kind === 'waiting' ? 'Open' : 'Show', true, () => this._go(s));
             if (kind === 'done')
                 button('Dismiss', false, () => this._closeBubble(s.id));
@@ -346,6 +466,57 @@ class MoniOrcaBar extends PanelMenu.Button {
     }
 
     // Claude Code picks an option by its number key.
+    // The top bar gets no keys on X11 without a grab, so typing in a
+    // bubble holds one until Enter, Escape or a click elsewhere.
+    _startTyping(card, field) {
+        if (this._typing)
+            return;
+        const grab = Main.pushModal(card, {actionMode: Shell.ActionMode.POPUP});
+        if (!grab)
+            return;
+        this._typing = {card, grab};
+        global.stage.set_key_focus(field.clutter_text);
+    }
+
+    _stopTyping() {
+        if (!this._typing)
+            return;
+        const {grab} = this._typing;
+        this._typing = null;
+        global.stage.set_key_focus(null);
+        Main.popModal(grab);
+    }
+
+    // A finished session gets a new prompt. A question gets its "Type
+    // something" choice, then the text and Enter as plain keys: Orca refuses
+    // a prompt (text + Enter in one send) while the agent waits.
+    async _reply(s, text, waiting, choice) {
+        this._closeBubble(s.id);
+        const pause = ms => new Promise(resolve => GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
+            resolve();
+            return GLib.SOURCE_REMOVE;
+        }));
+        try {
+            const t = await this._terminal(s);
+            const send = args => O.run(this._cli, ['terminal', 'send', '--terminal', t.handle, ...args], this._cancel);
+            if (t && !waiting) {
+                await send(['--text', text, '--enter']);
+            } else if (t) {
+                if (choice) {
+                    await send(['--text', String(choice)]);
+                    await pause(300);
+                }
+                await send(['--text', text]);
+                await pause(150);
+                await send(['--enter']);
+            }
+        } catch (e) {
+            console.warn(`moni: orca: ${e.message}`);
+        }
+        if (!this._destroyed)
+            this._pollSoon();
+    }
+
     async _answer(s, n) {
         this._closeBubble(s.id);
         try {
@@ -361,13 +532,16 @@ class MoniOrcaBar extends PanelMenu.Button {
 
     destroy() {
         this._destroyed = true;
+        this._stopTyping();
         this._cancel.cancel();
-        for (const t of [this._timer, this._hoverTimer])
+        this._monitor?.cancel();
+        for (const t of [this._timer, this._hoverTimer, this._layoutTimer])
             if (t)
                 GLib.source_remove(t);
         this._hideCard();
         for (const id of [...this._bubbles.keys()])
             this._closeBubble(id);
+        this._pill?.destroy();
         this._ids.forEach(id => this._settings.disconnect(id));
         super.destroy();
     }

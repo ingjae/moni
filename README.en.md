@@ -253,7 +253,7 @@ Activities: one dot and a name per session.
 | gray dot / hollow ring | finished / no agent |
 
 - **Hover** for a card with the last request and reply, branch and PR. **Click** to jump to that session's terminal tab with the Orca window in front.
-- **Bubbles** drop from a session's name when it finishes or starts waiting on you. A waiting bubble stays until it is answered. GNOME's Do Not Disturb silences them.
+- **Bubbles** drop from a session's name when it finishes or starts waiting on you. A bubble stays until you dismiss or answer it, or the session moves on (a question gets answered, a finished session starts working again). Up to three show at once, questions first and then the newest; the rest wait behind a **+N more · Dismiss all** pill, and Dismiss all leaves questions open. GNOME's Do Not Disturb silences them.
 - **Answer from the bubble** (off by default): Claude Code questions and permission prompts get their choices as buttons, which type the number.
 - **Shown sessions**: tick sessions in Settings to always show them, in your order, even when idle. With none ticked, the *Recent sessions* most recently active appear. The rest are in the ⌄ list.
 
